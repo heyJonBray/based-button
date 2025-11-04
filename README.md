@@ -1,15 +1,9 @@
 # Based Button
-n## Commands
-- Start chain: `./scripts/anvil.sh`
-- Build contracts: `bun -C packages/contracts run build`
-- Test contracts: `bun -C packages/contracts run test`
-- Run web: `bun -C apps/web dev`
-
 
 An onchain, last-deposit-wins button game with round-based lifecycle and multi-token support. Default UX uses USDC at $1 per play with a 90% pot and 10–20% dev/treasury fees. Supports fixed pricing or capped bonding curves, optional retroactive rewards, and prize vaults. Projects can launch their own rounds via a Hub or Factory.
 
 - Status: Draft v1.0
-- Author: Jon
+- Author: Jon Bray
 - Date: 2025-11-04
 
 ## Quick Links
@@ -32,22 +26,9 @@ An onchain, last-deposit-wins button game with round-based lifecycle and multi-t
 - Rounds finalize on expiry; payouts are automatic and deterministic.
 - Launch your own round with your token via a central Hub or a Factory.
 
-## Repo Structure (suggested)
+## Commands
 
-- docs/
-  - spec.md
-  - architecture.md
-  - economics.md
-  - api.md
-  - security.md
-  - testing.md
-  - deployment.md
-  - roadmap.md
-  - compliance.md
-- contracts/
-  - interfaces/
-  - ButtonHub.sol
-  - ButtonGameFactory.sol
-  - libraries/
-- subgraph/
-- frontend/
+- Start chain: `./scripts/anvil.sh`
+- Build contracts: `bun -C packages/contracts run build`
+- Test contracts: `bun -C packages/contracts run test`
+- Run mini-app: `bun -C apps/web dev`

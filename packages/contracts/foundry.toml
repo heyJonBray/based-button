@@ -11,6 +11,11 @@ evm_version = "paris"
 fs_permissions = [{ access = "read-write", path = "./"}]
 gas_reports = ["*"]
 
+remappings = [
+  "@openzeppelin/=lib/openzeppelin-contracts/",
+  "forge-std/=lib/forge-std/src/"
+]
+
 [fmt]
 line_length = 100
 tab_width = 2
