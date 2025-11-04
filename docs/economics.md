@@ -4,24 +4,24 @@
 
 - `basePrice`: 1 USDC
 - `roundDuration`: 10m
-- `devFeeBps`: 1000 (10%)
-- `treasuryFeeBps`: 0 (can be configured)
+- `cooldownSeconds`: 0 (start next round immediately)
+- `feeBps`: 1000 (10%) routed to dev/treasury vault
 - `pricingModel`: fixed
 - `potSeed`: optional (0–100 USDC)
 
 ## 2. Per-Play Split Examples
 
-- 1 USDC play, 10% dev:
+- 1 USDC play, 10% fee:
   - Pot: 0.90 USDC
-  - Dev: 0.10 USDC
+  - Fee vault: 0.10 USDC
 
-- 1 USDC play, 20% dev:
+- 1 USDC play, 20% fee:
   - Pot: 0.80 USDC
-  - Dev: 0.20 USDC
+  - Fee vault: 0.20 USDC
 
-Ensure `devFeeBps + treasuryFeeBps ≤ 10000`.
+Ensure `feeBps ≤ 10000`.
 
-## 3. Bonding Curve
+## 3. Future: Bonding Curve
 
 Cliff model:
 - Params: `cliffSize`, `incrementBpsPerCliff`, `maxMarkupBps`.
@@ -32,7 +32,7 @@ Cliff model:
 
 Cap max price growth (e.g., 25%) for UX and fairness.
 
-## 4. Retro Rewards (Optional)
+## 4. Future: Retro Rewards
 
 - Retro pool: X% of pot at finalize (e.g., 10–30%).
 - Distribution:
@@ -40,7 +40,7 @@ Cap max price growth (e.g., 25%) for UX and fairness.
   - Merkle claims for broader sets.
 - Winner share typically ≥70–90%.
 
-## 5. Prize Vaults
+## 5. Future: Prize Vaults
 
 - Sponsor-funded ERC-20/721/1155.
 - Distributed at finalize.

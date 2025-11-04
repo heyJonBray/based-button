@@ -2,71 +2,87 @@
 
 ## 1. Read Methods
 
-- `getRound(roundId)`: round summary.
+- `getRoundConfig(roundId)`: immutable params for the round.
+- `getRoundState(roundId)`: mutable state (deadline, winner, balances).
 - `getCurrentPrice(roundId)`: price if played now.
 - `getTimeRemaining(roundId)`: seconds until deadline (0 if ended).
+- `getFeeEscrow(roundId)`: accrued fees available to withdraw.
+- `getNextStartTime(seriesId)`: timestamp when the next round can be started.
 
 ## 2. Write Methods
 
-- `startRound(params) → roundId`
-  - Validates fee bounds, token allowlist (if any), and seeds pot if provided.
+- `startRound(seriesId, params) → roundId`
+  - Validates fee bounds, token allowlist (if any), and optional pot seed.
+  - Requires the prior round in the series to be finalized and past cooldown.
 - `play(roundId, maxPrice)`
-  - Pulls tokens, splits fees, updates winner, resets deadline.
+  - Pulls tokens, splits pot vs fee escrow, updates winner, resets deadline.
 - `finalize(roundId)`
-  - After expiry, pays pot and distributes vault/retro.
+  - After expiry, transfers the pot to the winner, stamps end time, and schedules the cooldown unlock.
+- `withdrawFees(roundId, amount, to)`
+  - Callable by the round's fee recipient to withdraw accrued fees at any time.
 
 ## 3. Events
 
-- `RoundStarted(token, roundId, params, startTime, deadline)`
-- `Play(roundId, player, pricePaid, potAfter, newDeadline)`
+- `RoundStarted(token, seriesId, roundId, params, startTime, deadline)`
+- `Play(roundId, player, pricePaid, potAfter, feeEscrowAfter, newDeadline)`
 - `RoundEnded(roundId, winner, endTime)`
-- `Finalized(roundId, winner, potPaid, devPaid, treasuryPaid)`
-- `RetroClaim(roundId, player, amount)`
-- `VaultAdded(roundId, asset, amountOrId)`
+- `Finalized(roundId, winner, potPaid, nextStartTime)`
+- `FeesWithdrawn(roundId, recipient, amount, feeEscrowAfter)`
 
 ## 4. Example Pseudocode
 
 ```solidity
 function play(uint256 id, uint256 maxPrice) external nonReentrant {
-  Round storage r = rounds[id];
-  require(!r.finalized, "finalized");
-  require(block.timestamp <= r.deadline, "ended");
+  RoundState storage s = roundState[id];
+  RoundConfig storage c = roundConfig[id];
+  require(s.active, "inactive");
+  require(block.timestamp <= s.deadline, "ended");
 
-  uint256 price = currentPrice(r);
+  uint256 price = currentPrice(c, s);
   require(price <= maxPrice, "slippage");
 
-  uint256 beforeBal = IERC20(r.token).balanceOf(address(this));
-  IERC20(r.token).safeTransferFrom(msg.sender, address(this), price);
-  uint256 received = IERC20(r.token).balanceOf(address(this)) - beforeBal;
+  uint256 before = IERC20(c.token).balanceOf(address(this));
+  IERC20(c.token).safeTransferFrom(msg.sender, address(this), price);
+  uint256 received = IERC20(c.token).balanceOf(address(this)) - before;
 
-  uint256 devAmt = (received * r.devFeeBps) / 10000;
-  uint256 treasAmt = (received * r.treasuryFeeBps) / 10000;
-  uint256 potAmt = received - devAmt - treasAmt;
+  uint256 feeAmt = (received * c.feeBps) / 10_000;
+  uint256 potAmt = received - feeAmt;
 
-  r.pot += potAmt;
-  if (devAmt > 0) IERC20(r.token).safeTransfer(r.dev, devAmt);
-  if (treasAmt > 0) IERC20(r.token).safeTransfer(r.treasury, treasAmt);
+  s.potBalance += potAmt;
+  s.feeEscrow += feeAmt;
+  s.plays += 1;
+  s.currentWinner = msg.sender;
+  s.deadline = uint64(block.timestamp + c.roundDuration);
 
-  r.plays += 1;
-  r.currentWinner = msg.sender;
-  r.deadline = uint64(block.timestamp + r.roundDuration);
-
-  emit Play(id, msg.sender, received, r.pot, r.deadline);
+  emit Play(id, msg.sender, received, s.potBalance, s.feeEscrow, s.deadline);
 }
 
 function finalize(uint256 id) external nonReentrant {
-  Round storage r = rounds[id];
-  require(!r.finalized, "finalized");
-  require(block.timestamp > r.deadline, "not ended");
+  RoundState storage s = roundState[id];
+  RoundConfig storage c = roundConfig[id];
+  require(s.active, "inactive");
+  require(block.timestamp > s.deadline, "not ended");
 
-  r.finalized = true;
-  r.endTime = uint64(block.timestamp);
+  s.active = false;
+  s.finalized = true;
+  s.endTime = uint64(block.timestamp);
+  s.nextStartTime = uint64(block.timestamp + c.cooldownSeconds);
 
-  address winner = r.currentWinner;
-  uint256 potAmt = r.pot;
+  IERC20(c.token).safeTransfer(s.currentWinner, s.potBalance);
 
-  IERC20(r.token).safeTransfer(winner, potAmt);
-
-  emit RoundEnded(id, winner, r.endTime);
-  emit Finalized(id, winner, potAmt, 0, 0);
+  emit RoundEnded(id, s.currentWinner, s.endTime);
+  emit Finalized(id, s.currentWinner, s.potBalance, s.nextStartTime);
 }
+
+function withdrawFees(uint256 id, uint256 amount, address to) external nonReentrant {
+  RoundState storage s = roundState[id];
+  RoundConfig storage c = roundConfig[id];
+  require(msg.sender == c.feeRecipient, "unauthorized");
+  require(amount <= s.feeEscrow, "exceeds balance");
+
+  s.feeEscrow -= amount;
+  IERC20(c.token).safeTransfer(to, amount);
+
+  emit FeesWithdrawn(id, msg.sender, amount, s.feeEscrow);
+}
+```

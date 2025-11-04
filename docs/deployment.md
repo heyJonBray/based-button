@@ -1,11 +1,12 @@
 # Deployment Plan
 
-## Phase 1: Canonical USDC MVP (L2)
+## Phase 1: Canonical USDC MVP
 
 - Network: Base
-- Params: 1 USDC per play, 10% dev, fixed price, 5m duration (variable)
-- No retro, no vaults initially
+- Params: 1 USDC per play, 10% fee vault, fixed price, 5m duration (can be changed by admin)
+- `cooldownSeconds = 0` so rounds can restart immediately after finalize
 - Seed pot (optional)
+- Fee recipient withdraws via `withdrawFees` on demand (multisig recommended)
 
 ## Phase 2: Create-Your-Own Rounds
 
@@ -13,16 +14,6 @@
 - Fee caps and token allowlist
 - Leaderboards and round explorer
 - Subgraph indexing
-
-## Phase 3: Curves and Vault Prizes
-
-- Add capped cliff pricing model
-- Vault prizes (ERC-20/721/1155)
-
-## Phase 4: Retro Rewards (Claim-Based)
-
-- Emit Merkle roots offchain
-- `claimRetro` for participants
 
 ## Ops
 

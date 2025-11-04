@@ -10,7 +10,7 @@
 
 ## Roadmap
 
-- MVP: USDC round on Base, fixed price, 10% dev.
+- MVP: USDC round on Base, fixed price, 10% fee vault, sequential rounds via Hub.
 - Q2: Hub/Factory for multi-token rounds.
 - Q3: Bonding curve + prize vaults.
 - Q4: Retro rewards, referrals, analytics polish.

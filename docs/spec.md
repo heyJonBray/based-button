@@ -5,7 +5,7 @@ Date: 2025-11-04
 
 ## 1. Executive Summary
 
-Based Button is an onchain, last-deposit-wins game. Each play costs a fixed amount (default: 1 USDC). A portion of each play feeds the pot (e.g., 90%), and the rest goes to the dev/treasury (10–20%). Each play resets the timer; if no one plays before the deadline, the last player wins the pot. The system is round-based, supports multiple tokens, bonding curves, optional retroactive rewards, and sponsor vault prizes.
+Based Button is an onchain, last-deposit-wins game. Each play costs a fixed amount (default: 1 USDC). A portion of each play feeds the pot (e.g., 90%), and the rest accrues to the dev fee vault (generally 10–20%). Each play resets the timer; if no one plays before the deadline, the last player wins the pot. The system is round-based and Hub-driven so sequential rounds can be launched per token as soon as the prior round is finalized. Advanced mechanics like bonding curves, retro rewards, and sponsor vault prizes are tracked as post-MVP enhancements.
 
 ## 2. Terminology
 
@@ -13,14 +13,32 @@ Based Button is an onchain, last-deposit-wins game. Each play costs a fixed amou
 - Round: Self-contained game instance with immutable parameters once started.
 - Pot: Accumulated assets available to the winner at round end.
 - Dev Fee: Percentage of each play directed to a designated dev/treasury.
-- Treasury Split: Optional split to a project treasury or split contract.
+- Fee Vault: Escrow of accumulated fees for the dev/treasury.
 - Winner: Last address to successfully play before timer expiration.
 - Timer: Countdown measured in seconds; resets on each play.
 - Game Token: ERC-20 token used for play (e.g., USDC).
 - Factory: Contract that deploys parameterized ButtonGame clones.
 - Hub: Central controller offering per-token rounds via registry and round IDs.
 
-## 3. Goals and Non-Goals
+## 3. Scope
+
+### 3.1 MVP Scope
+
+- Fixed-price rounds with a single ERC-20 token (USDC default).
+- Single fee recipient (dev/treasury) with on-demand withdrawals.
+- Hub-coordinated sequential rounds with optional cooldowns.
+- Finalize transfers the entire pot to the winning player.
+- Events and read helpers for analytics, countdown, and pricing.
+
+### 3.2 Deferred for Later Iterations
+
+- Retroactive rewards or split payouts to prior players.
+- Sponsor vault prizes or NFT/1155 rewards.
+- Multi-recipient fee splits and referral rebates.
+- Complex pricing/bonding curves beyond fixed price.
+- Free play promotions and Merkle voucher plumbing.
+
+## 4. Goals and Non-Goals
 
 ### Goals
 
@@ -36,72 +54,71 @@ Based Button is an onchain, last-deposit-wins game. Each play costs a fixed amou
 - Not an AMM or lending protocol.
 - Not offchain-timed; onchain timestamps are the source of truth.
 
-## 4. Core Game Design
+## 5. Core Game Design
 
-### 4.1 Mechanics
+### 5.1 Mechanics
 
 - Each play charges `currentPrice`.
-- Split play amount across pot and fees (dev/treasury).
+- Split play amount across pot and fee vault (dev/treasury).
 - On play:
   - Update `currentWinner = msg.sender`.
   - Reset `deadline = now + roundDuration`.
-  - Increment play count and adjust price if using a curve.
+  - Increment play count; pricing stays fixed in MVP but hooks remain for future curves.
 
-### 4.2 Timing and Resolution
+### 5.2 Timing and Resolution
 
 - Use `block.timestamp` for deadlines.
 - `roundDuration`: recommended 240 seconds (configurable).
 - Anyone can call `finalize()` after expiry; winner can call `claim()` if exposed.
 - Plays are rejected after expiry.
 
-### 4.3 Pricing Models
+### 5.3 Pricing Models
 
-- Fixed: `price = basePrice`.
-- Cliff curve: Increase by small increments at play-count cliffs.
-- Cap maximum markup (e.g., 25%) to avoid runaway costs.
-- Parameters:
-  - `basePrice`, `cliffSize`, `incrementBpsPerCliff`, `maxMarkupBps`.
+- MVP: fixed pricing (`price = basePrice`).
+- Future: cliff curves or other capped bonding curves once spec'd.
 
-### 4.4 Fees and Splits
+### 5.4 Fees and Splits
 
-- `devFeeBps` = 1000–2000 (10–20%).
-- `treasuryFeeBps` optional.
-- Ensure fees ≤ 10000 bps; remainder goes to pot.
+- `feeBps` = 1000–2000 (10–20% typical) routed to a single fee recipient.
+- Fee amount accrues on the round and can be withdrawn by the fee recipient anytime via `withdrawFees`.
+- Ensure `feeBps ≤ 10000`; remainder goes to pot.
+- Multi-recipient splits are future work.
 
-### 4.5 Free Plays and Promotions
+### 5.5 Free Plays and Promotions (Future)
 
-- Early wallets can get a free play via Merkle allowlist or signed vouchers.
-- Free plays reset timer and update winner.
-- Free play pot contribution can be 0 or sponsor-funded.
+- Track as backlog; MVP excludes free plays.
+- When implemented, free plays should reset the timer and may require sponsor-funded pot contributions.
 
-### 4.6 Retroactive Rewards (Optional)
+### 5.6 Payouts
 
-- Winner gets majority; retro pool distributes to previous participants.
-- Use last-N inline payouts for gas control and/or Merkle claims for the rest.
-- Geometric decay or flat-per-unique-wallet options.
+- `finalize` transfers the full pot to `currentWinner`.
+- Fee recipient can call `withdrawFees(roundId, amount, to)` at any time after fees accrue.
+- Contract retains fees until withdrawn, enabling batched dev payouts.
 
-### 4.7 Additional Prizes (Vaults)
-
-- Sponsors can add ERC-20/721/1155 prizes to a round.
-- Vault is paid at finalize to winner or split by retro rules.
-
-### 4.8 Round Lifecycle
+### 5.7 Round Lifecycle
 
 States:
-- NotStarted → Active → Ended → Finalized → Archived
+- NotStarted → Active → Ended → Finalized → Ready
 
 Transitions:
 - `startRound`: sets parameters and initial deadline.
 - `play`: updates pot, fees, winner, deadline.
-- `finalize`: transfers pot, distributes prizes/retro, locks round.
+- `finalize`: transfers pot to the winner, marks round finalized, and records cooldown unlock time.
+- `startNextRound`: allowed once prior round is `Ready` and optional cooldown has elapsed.
 
-## 5. Multi-Token and Third-Party Launch
+Cooldown:
+- `cooldownSeconds` defaults to 0 (start immediately) but can be set per round.
+- On finalize, `nextStartTime = endTime + cooldownSeconds`.
+- Hub rejects `startRound` if attempting to reuse the same series before `nextStartTime`.
+- `Ready` = `finalized` and `block.timestamp ≥ nextStartTime`.
 
-- Hub: multiple rounds per token via a central contract.
-- Factory: deploy minimal proxies per project/token for isolation.
+## 6. Multi-Token and Third-Party Launch
+
+- Hub: multiple sequential rounds per token/series via a central contract.
+- Factory: deploy minimal proxies per project/token for isolation (post-MVP).
 - Hybrid: canonical USDC on Hub; partner-branded instances via Factory.
 
-## 6. UX Notes
+## 7. UX Notes
 
 - Approve or permit flows for ERC-20.
 - Show live countdown, current pot, and projected deadline.

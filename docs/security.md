@@ -3,6 +3,7 @@
 ## 1. Controls
 
 - ReentrancyGuard on `play` and `finalize`.
+- `withdrawFees` gated by fee recipient and guarded by ReentrancyGuard.
 - SafeERC20 and return-value checks.
 - Fee caps and parameter bounds.
 - Deadline monotonicity (no backward movement).
