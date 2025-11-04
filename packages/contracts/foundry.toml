@@ -1,20 +1,27 @@
 [profile.default]
+auto_detect_solc = false
+solc = "0.8.28"
 src = "src"
-out = "out"
-libs = ["lib"]
 test = "test"
 script = "script"
-solc_version = "0.8.24"
-optimizer = true
-optimizer_runs = 800
-evm_version = "paris"
-fs_permissions = [{ access = "read-write", path = "./"}]
-gas_reports = ["*"]
-
+out = "out"
+libs = ["lib"]
 remappings = [
   "@openzeppelin/=lib/openzeppelin-contracts/",
+  "@solady/=lib/solady/src",
   "forge-std/=lib/forge-std/src/"
 ]
+
+bytecode_hash = 'none'
+cbor_metadata = false
+
+optimizer = true
+optimizer_runs = 99_999_999
+via_ir = true
+
+evm_version = "prague"
+fs_permissions = [{ access = "read-write", path = "./"}]
+gas_reports = ["*"]
 
 [fmt]
 line_length = 100
@@ -24,3 +31,15 @@ int_types = "long"
 
 [rpc_endpoints]
 anvil = "http://127.0.0.1:8545"
+base = "${BASE_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+
+[etherscan]
+base = { key = "${BASESCAN_API_KEY}"}
+base_sepolia = { key = "${BASESCAN_API_KEY}"}
+anvil = { key = "" }
+
+[profile.via_ir]
+via_ir = true
+test = 'src'
+out = 'via_ir-out'
