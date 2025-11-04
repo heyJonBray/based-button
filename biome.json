@@ -1,0 +1,118 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.3.0/schema.json",
+	"root": true,
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true,
+		"defaultBranch": "main"
+	},
+	"files": {
+		"ignoreUnknown": true,
+		"ignore": [
+			"**/node_modules",
+			"**/bun.lockb",
+			"**/pnpm-lock.yaml",
+			"**/package-lock.json",
+			"**/yarn.lock",
+			"**/.next",
+			"**/.vercel",
+			"**/dist",
+			"**/build",
+			"packages/contracts/out",
+			"packages/contracts/cache",
+			"packages/contracts/broadcast",
+			"packages/contracts/lib",
+			"packages/subgraph/generated",
+			"packages/subgraph/build",
+			"**/.turbo",
+			"**/.idea",
+			"**/.DS_Store"
+		]
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab",
+		"lineWidth": 120
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"a11y": {
+				"useKeyWithClickEvents": "off"
+			},
+			"correctness": {
+				"noEmptyPattern": "off"
+			},
+			"suspicious": {
+				"noArrayIndexKey": "off"
+			},
+			"style": {
+				"noUnusedTemplateLiteral": "off",
+				"useSelfClosingElements": "off",
+				"useFilenamingConvention": "error",
+				"noParameterAssign": "error",
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSingleVarDeclarator": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"noUselessElse": "error"
+			}
+		}
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double",
+			"semicolons": "always"
+		}
+	},
+	"overrides": [
+		{
+			"include": [
+				"**/*.config.{js,cjs,mjs,ts}",
+				"**/*.config.*.{js,cjs,mjs,ts}",
+				"**/next-env.d.ts",
+				"**/types/**"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useFilenamingConvention": "off"
+					}
+				}
+			}
+		},
+		{
+			"include": ["packages/subgraph/generated/**"],
+			"linter": {
+				"enabled": false
+			}
+		},
+		{
+			"include": ["packages/contracts/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"useFilenamingConvention": "off"
+					}
+				}
+			}
+		},
+		{
+			"include": ["**/*.md", "**/*.mdx"],
+			"linter": {
+				"enabled": false
+			}
+		}
+	]
+}

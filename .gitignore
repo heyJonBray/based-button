@@ -1,0 +1,16 @@
+# root
+.DS_Store
+node_modules
+bun.lockb
+.env
+.env.*
+# Foundry
+out
+cache
+lib
+broadcast
+# Subgraph
+generated
+build
+# VSCode
+.vscode

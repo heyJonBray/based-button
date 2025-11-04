@@ -1,0 +1,14 @@
+{
+  "name": "@based-button/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vv",
+    "coverage": "forge coverage",
+    "lint": "echo \"solhint optional\"",
+    "fmt": "forge fmt",
+    "anvil": "anvil"
+  }
+}

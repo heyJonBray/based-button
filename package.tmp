@@ -1,0 +1,22 @@
+{
+  "name": "based-button",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "bun run -A scripts/build-all.ts",
+    "dev": "bun run -A scripts/dev-all.ts",
+    "lint": "echo \"add your linter(s)\"",
+    "format": "echo \"add prettier config and run it\""
+  }
+}
