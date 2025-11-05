@@ -18,11 +18,10 @@ contract ButtonHubTest is Test {
   uint64 constant ROUND_DURATION = 600; // 10 minutes
   uint32 constant COOLDOWN = 0;
   uint16 constant FEE_BPS = 1000; // 10%
-  uint64 constant SERIES_ID = 1;
+  uint256 constant MAX_PRICE_BUFFER = BASE_PRICE * 2;
 
   event RoundStarted(
     address indexed token,
-    uint64 indexed seriesId,
     uint256 indexed roundId,
     uint64 startTime,
     uint64 deadline,
@@ -42,6 +41,8 @@ contract ButtonHubTest is Test {
     uint64 newDeadline
   );
 
+  event RoundEnded(uint256 indexed roundId, address indexed winner, uint64 endTime);
+
   event Finalized(
     uint256 indexed roundId, address indexed winner, uint256 potPaid, uint64 nextStartTime
   );
@@ -50,11 +51,16 @@ contract ButtonHubTest is Test {
     uint256 indexed roundId, address indexed recipient, uint256 amount, uint256 feeEscrowAfter
   );
 
+  event BasePriceUpdated(uint256 indexed roundId, uint256 newPrice);
+  event PermissionlessRoundStartUpdated(bool enabled);
+  event LastRoundLockSet(bool locked);
+  event DefaultTokenUpdated(address token);
+
   function setUp() public {
-    vm.prank(owner);
+    vm.startPrank(owner);
     token = new MockERC20("Test USDC", "USDC", 6);
-    vm.prank(owner);
     hub = new ButtonHub(owner, address(token));
+    vm.stopPrank();
 
     // Fund players
     token.mint(player1, 1000e6);
@@ -80,7 +86,7 @@ contract ButtonHubTest is Test {
   function _startRoundAsOwner() internal returns (uint256 roundId) {
     vm.prank(owner);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
-    return hub.startRound(SERIES_ID, params);
+    return hub.startRound(params);
   }
 
   function _approveAndPlay(address player, uint256 roundId, uint256 maxPrice) internal {
@@ -92,7 +98,7 @@ contract ButtonHubTest is Test {
 
   // ========== Deployment Tests ==========
 
-  function test_Deployment_SetsOwnerAndToken() public {
+  function test_Deployment_SetsOwnerAndToken() public view {
     assertEq(hub.owner(), owner);
     assertEq(hub.defaultToken(), address(token));
   }
@@ -107,7 +113,21 @@ contract ButtonHubTest is Test {
   function test_StartRound_OwnerCanStart() public {
     vm.prank(owner);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
-    uint256 roundId = hub.startRound(SERIES_ID, params);
+
+    vm.expectEmit(true, true, false, false);
+    emit RoundStarted(
+      address(token),
+      1, // roundId
+      uint64(block.timestamp),
+      uint64(block.timestamp + ROUND_DURATION),
+      ROUND_DURATION,
+      COOLDOWN,
+      FEE_BPS,
+      BASE_PRICE,
+      0 // pricingModel
+    );
+
+    uint256 roundId = hub.startRound(params);
 
     assertEq(roundId, 1);
     (ButtonHub.RoundConfig memory config, ButtonHub.RoundState memory state) =
@@ -123,7 +143,7 @@ contract ButtonHubTest is Test {
     vm.prank(player1);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
     vm.expectRevert(ButtonHub.NotAuthorized.selector);
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
   }
 
   function test_StartRound_PermissionlessEnabled() public {
@@ -134,11 +154,10 @@ contract ButtonHubTest is Test {
     params.potSeed = 10e6; // Player deposits initial pot
     vm.startPrank(player1);
     IERC20(token).approve(address(hub), 10e6);
-    uint256 roundId = hub.startRound(SERIES_ID, params);
+    uint256 roundId = hub.startRound(params);
     vm.stopPrank();
 
-    (ButtonHub.RoundConfig memory config, ButtonHub.RoundState memory state) =
-      _getRoundData(roundId);
+    (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
     assertEq(state.potBalance, 10e6);
   }
 
@@ -149,7 +168,7 @@ contract ButtonHubTest is Test {
     vm.prank(owner);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
     vm.expectRevert(ButtonHub.LastRoundLocked.selector);
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
   }
 
   function test_StartRound_WithPotSeed() public {
@@ -157,7 +176,7 @@ contract ButtonHubTest is Test {
     params.potSeed = 50e6;
     vm.startPrank(owner);
     IERC20(token).approve(address(hub), 50e6);
-    uint256 roundId = hub.startRound(SERIES_ID, params);
+    uint256 roundId = hub.startRound(params);
     vm.stopPrank();
 
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
@@ -172,12 +191,12 @@ contract ButtonHubTest is Test {
     vm.prank(owner);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
     vm.expectRevert(abi.encodeWithSelector(ButtonHub.RoundInProgress.selector, state.deadline));
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
   }
 
   function test_StartRound_RevertsWhenCooldownActive() public {
     uint256 round1 = _startRoundAsOwner();
-    _approveAndPlay(player1, round1, BASE_PRICE * 2);
+    _approveAndPlay(player1, round1, MAX_PRICE_BUFFER);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
     vm.prank(player2);
     hub.finalize(round1);
@@ -189,9 +208,9 @@ contract ButtonHubTest is Test {
     vm.prank(owner);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
     params.cooldownSeconds = cooldown;
-    uint256 round2 = hub.startRound(SERIES_ID, params);
+    uint256 round2 = hub.startRound(params);
 
-    _approveAndPlay(player1, round2, BASE_PRICE * 2);
+    _approveAndPlay(player1, round2, MAX_PRICE_BUFFER);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
     vm.prank(player2);
     hub.finalize(round2);
@@ -200,7 +219,7 @@ contract ButtonHubTest is Test {
     vm.prank(owner);
     params.cooldownSeconds = COOLDOWN;
     vm.expectRevert(abi.encodeWithSelector(ButtonHub.CooldownActive.selector, state.nextStartTime));
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
   }
 
   function test_StartRound_ValidationErrors() public {
@@ -209,31 +228,31 @@ contract ButtonHubTest is Test {
     params.feeBps = 10001;
     vm.prank(owner);
     vm.expectRevert(abi.encodeWithSelector(ButtonHub.FeeTooHigh.selector, uint16(10001)));
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
 
     params.feeBps = FEE_BPS;
     params.feeRecipient = address(0);
     vm.prank(owner);
     vm.expectRevert(ButtonHub.InvalidAddress.selector);
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
 
     params.feeRecipient = feeRecipient;
     params.roundDuration = 0;
     vm.prank(owner);
     vm.expectRevert(ButtonHub.InvalidDuration.selector);
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
 
     params.roundDuration = ROUND_DURATION;
     params.basePrice = 0;
     vm.prank(owner);
     vm.expectRevert(ButtonHub.InvalidBasePrice.selector);
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
 
     params.basePrice = BASE_PRICE;
     params.pricingModel = 99;
     vm.prank(owner);
     vm.expectRevert(abi.encodeWithSelector(ButtonHub.InvalidPricingModel.selector, uint8(99)));
-    hub.startRound(SERIES_ID, params);
+    hub.startRound(params);
   }
 
   // ========== Play Tests ==========
@@ -243,13 +262,30 @@ contract ButtonHubTest is Test {
     uint256 initialPot = 0;
     uint256 initialFeeEscrow = 0;
 
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    uint256 expectedPot = initialPot + (BASE_PRICE * 90 / 100);
+    uint256 expectedFeeEscrow = initialFeeEscrow + (BASE_PRICE * 10 / 100);
+
+    vm.startPrank(player1);
+    IERC20(token).approve(address(hub), MAX_PRICE_BUFFER);
+
+    vm.expectEmit(true, true, false, false, address(hub));
+    emit Play(
+      roundId,
+      player1,
+      BASE_PRICE,
+      expectedPot,
+      expectedFeeEscrow,
+      uint64(block.timestamp + ROUND_DURATION)
+    );
+
+    hub.play(roundId, MAX_PRICE_BUFFER);
+    vm.stopPrank();
 
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
     assertEq(state.currentWinner, player1);
     assertEq(state.plays, 1);
-    assertEq(state.potBalance, initialPot + (BASE_PRICE * 90 / 100)); // 90% to pot
-    assertEq(state.feeEscrow, initialFeeEscrow + (BASE_PRICE * 10 / 100)); // 10% to fees
+    assertEq(state.potBalance, expectedPot);
+    assertEq(state.feeEscrow, expectedFeeEscrow);
     assertEq(state.deadline, block.timestamp + ROUND_DURATION);
   }
 
@@ -258,7 +294,7 @@ contract ButtonHubTest is Test {
     uint64 initialDeadline = uint64(block.timestamp + ROUND_DURATION);
 
     vm.warp(block.timestamp + 300); // 5 minutes in
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
 
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
     assertEq(state.deadline, block.timestamp + ROUND_DURATION);
@@ -267,7 +303,7 @@ contract ButtonHubTest is Test {
 
   function test_Play_RevertsWhenRoundInactive() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
     vm.prank(player2);
     hub.finalize(roundId);
@@ -302,19 +338,19 @@ contract ButtonHubTest is Test {
   function test_Play_UpdatesWinner() public {
     uint256 roundId = _startRoundAsOwner();
 
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
     assertEq(state.currentWinner, player1);
 
     vm.warp(block.timestamp + 100);
-    _approveAndPlay(player2, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player2, roundId, MAX_PRICE_BUFFER);
     (, state) = _getRoundData(roundId);
     assertEq(state.currentWinner, player2);
   }
 
   function test_Play_WithUpdatedPrice() public {
     uint256 roundId = _startRoundAsOwner();
-    uint256 newPrice = BASE_PRICE * 2;
+    uint256 newPrice = MAX_PRICE_BUFFER;
 
     vm.prank(owner);
     hub.updateBasePrice(roundId, newPrice);
@@ -329,12 +365,18 @@ contract ButtonHubTest is Test {
 
   function test_Finalize_Success() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
 
     (, ButtonHub.RoundState memory stateBefore) = _getRoundData(roundId);
     uint256 potBefore = stateBefore.potBalance;
     uint256 playerBalanceBefore = token.balanceOf(player1);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
+
+    vm.expectEmit(true, true, false, false);
+    emit RoundEnded(roundId, player1, uint64(block.timestamp));
+
+    vm.expectEmit(true, true, false, false);
+    emit Finalized(roundId, player1, potBefore, uint64(block.timestamp + COOLDOWN));
 
     vm.prank(player2);
     hub.finalize(roundId);
@@ -348,7 +390,7 @@ contract ButtonHubTest is Test {
 
   function test_Finalize_RevertsWhenRoundInProgress() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
 
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
     vm.prank(player2);
@@ -358,7 +400,7 @@ contract ButtonHubTest is Test {
 
   function test_Finalize_RevertsWhenAlreadyFinalized() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
     vm.prank(player2);
     hub.finalize(roundId);
@@ -379,7 +421,7 @@ contract ButtonHubTest is Test {
 
   function test_Finalize_SetsCooldown() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
     vm.prank(player1);
     hub.finalize(roundId);
@@ -392,22 +434,26 @@ contract ButtonHubTest is Test {
 
   function test_WithdrawFees_Success() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
 
     uint256 feeAmount = BASE_PRICE * FEE_BPS / 10000;
     uint256 withdrawAmount = feeAmount / 2;
+    uint256 expectedFeeEscrowAfter = feeAmount - withdrawAmount;
+
+    vm.expectEmit(true, true, false, false);
+    emit FeesWithdrawn(roundId, feeRecipient, withdrawAmount, expectedFeeEscrowAfter);
 
     vm.prank(feeRecipient);
     hub.withdrawFees(roundId, withdrawAmount, feeRecipient);
 
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
-    assertEq(state.feeEscrow, feeAmount - withdrawAmount);
+    assertEq(state.feeEscrow, expectedFeeEscrowAfter);
     assertEq(token.balanceOf(feeRecipient), 1000e6 + withdrawAmount);
   }
 
   function test_WithdrawFees_RevertsWhenNotRecipient() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
 
     vm.prank(player1);
     vm.expectRevert(ButtonHub.NotAuthorized.selector);
@@ -416,7 +462,7 @@ contract ButtonHubTest is Test {
 
   function test_WithdrawFees_RevertsWhenInsufficient() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
 
     uint256 feeAmount = BASE_PRICE * FEE_BPS / 10000;
 
@@ -429,7 +475,7 @@ contract ButtonHubTest is Test {
 
   function test_WithdrawFees_RevertsOnZeroAddress() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
 
     vm.prank(feeRecipient);
     vm.expectRevert(ButtonHub.InvalidAddress.selector);
@@ -441,9 +487,15 @@ contract ButtonHubTest is Test {
   function test_SetPermissionlessRoundStart() public {
     assertFalse(hub.permissionlessRoundStart());
 
+    vm.expectEmit(false, false, false, true);
+    emit PermissionlessRoundStartUpdated(true);
+
     vm.prank(owner);
     hub.setPermissionlessRoundStart(true);
     assertTrue(hub.permissionlessRoundStart());
+
+    vm.expectEmit(false, false, false, true);
+    emit PermissionlessRoundStartUpdated(false);
 
     vm.prank(owner);
     hub.setPermissionlessRoundStart(false);
@@ -453,6 +505,9 @@ contract ButtonHubTest is Test {
   function test_SetLastRound() public {
     assertFalse(hub.lastRoundLocked());
 
+    vm.expectEmit(false, false, false, true);
+    emit LastRoundLockSet(true);
+
     vm.prank(owner);
     hub.setLastRound(true);
     assertTrue(hub.lastRoundLocked());
@@ -460,7 +515,10 @@ contract ButtonHubTest is Test {
 
   function test_UpdateBasePrice() public {
     uint256 roundId = _startRoundAsOwner();
-    uint256 newPrice = BASE_PRICE * 2;
+    uint256 newPrice = MAX_PRICE_BUFFER;
+
+    vm.expectEmit(true, false, false, false);
+    emit BasePriceUpdated(roundId, newPrice);
 
     vm.prank(owner);
     hub.updateBasePrice(roundId, newPrice);
@@ -471,18 +529,21 @@ contract ButtonHubTest is Test {
 
   function test_UpdateBasePrice_RevertsWhenFinalized() public {
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
     vm.prank(player2);
     hub.finalize(roundId);
 
     vm.prank(owner);
     vm.expectRevert(ButtonHub.RoundAlreadyFinalized.selector);
-    hub.updateBasePrice(roundId, BASE_PRICE * 2);
+    hub.updateBasePrice(roundId, MAX_PRICE_BUFFER);
   }
 
   function test_SetDefaultToken() public {
     MockERC20 newToken = new MockERC20("New USDC", "USDC", 6);
+
+    vm.expectEmit(false, false, false, true);
+    emit DefaultTokenUpdated(address(newToken));
 
     vm.prank(owner);
     hub.setDefaultToken(address(newToken));
@@ -503,7 +564,6 @@ contract ButtonHubTest is Test {
     uint256 roundId = _startRoundAsOwner();
     ButtonHub.RoundState memory state = hub.getRoundState(roundId);
     assertTrue(state.active);
-    assertEq(state.seriesId, SERIES_ID);
   }
 
   function test_GetCurrentPrice() public {
@@ -511,8 +571,8 @@ contract ButtonHubTest is Test {
     assertEq(hub.getCurrentPrice(roundId), BASE_PRICE);
 
     vm.prank(owner);
-    hub.updateBasePrice(roundId, BASE_PRICE * 2);
-    assertEq(hub.getCurrentPrice(roundId), BASE_PRICE * 2);
+    hub.updateBasePrice(roundId, MAX_PRICE_BUFFER);
+    assertEq(hub.getCurrentPrice(roundId), MAX_PRICE_BUFFER);
   }
 
   function test_GetTimeRemaining() public {
@@ -530,28 +590,28 @@ contract ButtonHubTest is Test {
     uint256 roundId = _startRoundAsOwner();
     assertEq(hub.getFeeEscrow(roundId), 0);
 
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
     uint256 expectedFee = BASE_PRICE * FEE_BPS / 10000;
     assertEq(hub.getFeeEscrow(roundId), expectedFee);
   }
 
   function test_GetNextStartTime() public {
-    assertEq(hub.getNextStartTime(SERIES_ID), 0);
+    assertEq(hub.getNextStartTime(), 0);
 
     uint256 roundId = _startRoundAsOwner();
-    _approveAndPlay(player1, roundId, BASE_PRICE * 2);
+    _approveAndPlay(player1, roundId, MAX_PRICE_BUFFER);
     vm.warp(block.timestamp + ROUND_DURATION + 1);
     vm.prank(player1);
     hub.finalize(roundId);
 
-    assertEq(hub.getNextStartTime(SERIES_ID), block.timestamp + COOLDOWN);
+    assertEq(hub.getNextStartTime(), block.timestamp + COOLDOWN);
   }
 
   function test_GetLatestRoundId() public {
-    assertEq(hub.getLatestRoundId(SERIES_ID), 0);
+    assertEq(hub.getLatestRoundId(), 0);
 
     uint256 roundId = _startRoundAsOwner();
-    assertEq(hub.getLatestRoundId(SERIES_ID), roundId);
+    assertEq(hub.getLatestRoundId(), roundId);
   }
 
   // ========== Helper Functions ==========
