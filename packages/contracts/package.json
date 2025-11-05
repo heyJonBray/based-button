@@ -17,6 +17,6 @@
 		"anvil": "anvil",
 		"anvil:reset": "anvil --host 0.0.0.0 --port 8545 --mnemonic 'test test test test test test test test test test test junk' --steps-tracing",
 
-		"run-script": "./scripts/forge-script.sh"
+		"forge-script": "./scripts/forge-script.sh"
 	}
 }

@@ -54,6 +54,15 @@ contract ButtonHub is ReentrancyGuard, Ownable {
     uint256 potSeed;
   }
 
+  struct DurationReductionSchedule {
+    uint64 reduceBySeconds;
+    uint32 everyNRound;
+    uint64 minDuration;
+    uint64 initialDuration;
+    bool initialDurationCaptured;
+    bool configured;
+  }
+
   bool public permissionlessRoundStart;
   bool public lastRoundLocked;
   address public defaultToken;
@@ -101,6 +110,9 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
   /// @notice Emitted when the base price is updated by the owner.
   event BasePriceUpdated(uint256 indexed roundId, uint256 newPrice);
+
+  /// @notice Emitted when the automatic duration reduction schedule changes.
+  event DurationScheduleUpdated(uint64 reduceBySeconds, uint32 everyNRound, uint64 minDuration);
 
   /// @notice Emitted when the permissionless start flag changes.
   event PermissionlessRoundStartUpdated(bool enabled);
@@ -165,6 +177,15 @@ contract ButtonHub is ReentrancyGuard, Ownable {
   /// @notice Raised when referencing a round that does not exist.
   error RoundDoesNotExist(uint256 roundId);
 
+  /// @notice Raised when duration reduction schedule parameters are invalid.
+  error InvalidDurationSchedule();
+
+  /// @notice Raised when attempting to start a round without a configured duration schedule.
+  error DurationScheduleNotConfigured();
+
+  /// @notice Raised when attempting to modify the duration schedule after rounds have begun.
+  error DurationScheduleLocked(uint256 latestRoundId);
+
   /// @notice Tracks the next round identifier.
   uint256 private nextRoundId = 1;
 
@@ -172,12 +193,15 @@ contract ButtonHub is ReentrancyGuard, Ownable {
   mapping(uint256 => RoundState) internal roundState;
   uint256 internal latestRoundId;
 
+  DurationReductionSchedule public durationSchedule;
+
   /// @notice Starts a new round.
   function startRound(StartRoundParams calldata params)
     external
     nonReentrant
     returns (uint256 roundId)
   {
+    if (!durationSchedule.configured) revert DurationScheduleNotConfigured();
     if (lastRoundLocked) revert LastRoundLocked();
     if (!permissionlessRoundStart && msg.sender != owner()) revert NotAuthorized();
 
@@ -195,10 +219,12 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
     roundId = nextRoundId++;
 
+    uint64 appliedDuration = _applyDurationSchedule(roundId, params.roundDuration);
+
     RoundConfig storage config = roundConfig[roundId];
     config.token = token;
     config.basePrice = params.basePrice;
-    config.roundDuration = params.roundDuration;
+    config.roundDuration = appliedDuration;
     config.cooldownSeconds = params.cooldownSeconds;
     config.feeBps = params.feeBps;
     config.feeRecipient = params.feeRecipient;
@@ -208,7 +234,7 @@ contract ButtonHub is ReentrancyGuard, Ownable {
     RoundState storage state = roundState[roundId];
     state.roundId = roundId;
     state.startTime = uint64(block.timestamp);
-    state.deadline = uint64(block.timestamp + params.roundDuration);
+    state.deadline = uint64(block.timestamp + appliedDuration);
     state.active = true;
 
     latestRoundId = roundId;
@@ -221,7 +247,7 @@ contract ButtonHub is ReentrancyGuard, Ownable {
       roundId,
       state.startTime,
       state.deadline,
-      params.roundDuration,
+      appliedDuration,
       params.cooldownSeconds,
       params.feeBps,
       params.basePrice,
@@ -325,6 +351,35 @@ contract ButtonHub is ReentrancyGuard, Ownable {
     emit BasePriceUpdated(roundId, newPrice);
   }
 
+  /// @notice Configures or clears the automatic round duration reduction schedule.
+  function setDurationReductionSchedule(
+    uint64 reduceBySeconds,
+    uint32 everyNRound,
+    uint64 minDuration
+  ) external onlyOwner {
+    if (
+      reduceBySeconds == 0 || everyNRound == 0 || minDuration == 0
+        || minDuration > MAX_ROUND_DURATION
+    ) {
+      revert InvalidDurationSchedule();
+    }
+
+    if (latestRoundId != 0) {
+      revert DurationScheduleLocked(latestRoundId);
+    }
+
+    durationSchedule = DurationReductionSchedule({
+      reduceBySeconds: reduceBySeconds,
+      everyNRound: everyNRound,
+      minDuration: minDuration,
+      initialDuration: 0,
+      initialDurationCaptured: false,
+      configured: true
+    });
+
+    emit DurationScheduleUpdated(reduceBySeconds, everyNRound, minDuration);
+  }
+
   /// @notice Returns immutable configuration for a round.
   function getRoundConfig(uint256 roundId) external view returns (RoundConfig memory) {
     RoundConfig memory config = roundConfig[roundId];
@@ -402,6 +457,50 @@ contract ButtonHub is ReentrancyGuard, Ownable {
       return config.basePrice;
     }
     return config.basePrice;
+  }
+
+  function _applyDurationSchedule(uint256 roundId, uint64 proposedDuration)
+    internal
+    returns (uint64)
+  {
+    DurationReductionSchedule storage schedule = durationSchedule;
+    if (!schedule.configured) {
+      return proposedDuration;
+    }
+
+    if (!schedule.initialDurationCaptured) {
+      schedule.initialDuration = proposedDuration;
+      schedule.initialDurationCaptured = true;
+    }
+
+    if (schedule.everyNRound == 0) {
+      return proposedDuration;
+    }
+
+    if (roundId == 0) {
+      return proposedDuration;
+    }
+
+    uint256 reductions = (roundId - 1) / schedule.everyNRound;
+    if (reductions == 0) {
+      return proposedDuration;
+    }
+
+    uint256 reductionTotal = uint256(schedule.reduceBySeconds) * reductions;
+    uint64 baseDuration = schedule.initialDuration;
+    uint64 targetDuration;
+
+    if (reductionTotal >= baseDuration) {
+      targetDuration = schedule.minDuration;
+    } else {
+      // casting to uint64 is safe; reductionTotal < baseDuration (uint64), so reductionTotal <= type(uint64).max
+      // forge-lint: disable-next-line(unsafe-typecast)
+      uint64 reductionTotal64 = uint64(reductionTotal);
+      uint64 candidate = baseDuration - reductionTotal64;
+      targetDuration = candidate < schedule.minDuration ? schedule.minDuration : candidate;
+    }
+
+    return targetDuration < proposedDuration ? targetDuration : proposedDuration;
   }
 
   /// @notice Ensures the round exists and returns storage references.

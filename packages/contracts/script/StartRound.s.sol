@@ -21,7 +21,7 @@ contract StartRound is Script {
     address feeRecipient = vm.envAddress("FEE_RECIPIENT");
     require(feeRecipient != address(0), "FEE_RECIPIENT must be set");
     uint256 basePrice = vm.envOr("BASE_PRICE", uint256(1e6)); // 1 USDC (6 decimals)
-    uint256 potSeed = vm.envOr("POT_SEED", uint256(0)); // 0 = no seed
+    uint256 potSeed = vm.envOr("POT_SEED", basePrice); // Defaults to basePrice if not set
     uint256 privateKey = vm.envUint("PRIVATE_KEY");
 
     address tokenAddress = token == address(0) ? hub.defaultToken() : token;

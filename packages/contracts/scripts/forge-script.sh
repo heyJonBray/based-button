@@ -1,55 +1,153 @@
 #!/usr/bin/env bash
-# Interactive helper script to run Forge scripts with environment-specific configuration
+# Interactive helper script to run Forge scripts with environment-specific configuration.
+#
+# Author: Jon Bray <me@jonbray.dev>
+#
+# 1. Place script in the root of your Foundry project
+# 2. Create a .env.<chain> file for any network you want to interact with
+#    - e.g. .env.local .env.ethereum .env.base .env.base_sepolia
+# 3. Fill out env vars required by your scripts
+#
+# This script will automatically detect all scripts in your `/script` directory,
+# add them to the interactive selection, create `forge` commands to run them, and source
+# the correct .env file.
+#
+# Supports --broadcast and dry-run
+#
+# If chaining multiple scripts together that involve deployed contract addresses from
+# previous steps, simply the .env file as you go before each run.
+# Enjoy!
 
-set -e
+set -euo pipefail
 
-ENVIRONMENTS=("local" "mainnet" "testnet")
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
+FORGE_SCRIPTS_DIR="${PROJECT_ROOT}/script"
 
-SCRIPTS=(
-  "Deploy"
-  "DeployMockUSDC"
-  "StartRound"
-  "SetPermissionlessRoundStart"
-  "SetLastRound"
-  "SetDefaultToken"
-  "UpdateBasePrice"
-)
+if [ -t 1 ]; then
+  BOLD=$(printf '\033[1m')
+  DIM=$(printf '\033[2m')
+  CYAN=$(printf '\033[36m')
+  GREEN=$(printf '\033[32m')
+  YELLOW=$(printf '\033[33m')
+  RESET=$(printf '\033[0m')
+else
+  BOLD=""
+  DIM=""
+  CYAN=""
+  GREEN=""
+  YELLOW=""
+  RESET=""
+fi
 
-# Prompt for environment selection
-echo "What environment?"
-echo "Select from:"
-for i in "${!ENVIRONMENTS[@]}"; do
-  echo "  $((i+1))) ${ENVIRONMENTS[$i]}"
+print_header() {
+  printf '\n%s%sForge Script Runner%s\n' "$BOLD" "$CYAN" "$RESET"
+  printf '%sRun any Foundry script with a guided prompt%s\n' "$DIM" "$RESET"
+}
+
+print_section() {
+  printf '\n%s%s%s\n' "$BOLD" "$1" "$RESET"
+}
+
+print_tip() {
+  printf '%s%s%s\n' "$DIM" "$1" "$RESET"
+}
+
+speak_success() {
+  printf '\n%s%s%s\n' "$GREEN" "$1" "$RESET"
+}
+
+print_header
+print_tip "Create a .env.<chain_name> file in ${PROJECT_ROOT} for every chain you want to target (e.g. .env.base, .env.base_sepolia, .env.ethereum, or .env.local for Anvil)."
+
+shopt -s nullglob
+ENV_FILE_PATHS=("${PROJECT_ROOT}"/.env.*)
+shopt -u nullglob
+
+ENVIRONMENTS=()
+for path in "${ENV_FILE_PATHS[@]}"; do
+  filename="$(basename "$path")"
+  env_name="${filename#.env.}"
+  if [ -z "$env_name" ]; then
+    continue
+  fi
+  case "$env_name" in
+    example|template|sample)
+      continue
+      ;;
+  esac
+  ENVIRONMENTS+=("$env_name")
 done
-read -p "Enter choice [1-${#ENVIRONMENTS[@]}]: " env_choice
 
-if [ -z "$env_choice" ] || [ "$env_choice" -lt 1 ] || [ "$env_choice" -gt "${#ENVIRONMENTS[@]}" ]; then
-  echo "Error: Invalid choice"
+if [ ${#ENVIRONMENTS[@]} -eq 0 ]; then
+  printf '\n%s⚠️  No environment files found in %s%s\n' "$YELLOW" "$PROJECT_ROOT" "$RESET"
+  printf '%sCreate files like .env.local, .env.base, or .env.sepolia before running this helper.%s\n' "$DIM" "$RESET"
   exit 1
 fi
 
-ENVIRONMENT="${ENVIRONMENTS[$((env_choice-1))]}"
+IFS=$'\n' ENVIRONMENTS=($(printf '%s\n' "${ENVIRONMENTS[@]}" | sort))
+unset IFS
 
-# If local environment, check if anvil is needed
-if [ "$ENVIRONMENT" = "local" ]; then
-  echo ""
-  echo "⚠️  For local environment, you need to start Anvil first!"
-  echo ""
-  echo "Open another terminal, navigate to this directory, and run:"
-  echo "  bun run anvil:reset"
-  echo ""
-  read -p "Press Enter once Anvil is running in another terminal..."
+print_section "Detected environments"
+for env in "${ENVIRONMENTS[@]}"; do
+  printf '  • .env.%s\n' "$env"
+done
+
+shopt -s nullglob
+SCRIPT_FILE_PATHS=("${FORGE_SCRIPTS_DIR}"/*.s.sol)
+shopt -u nullglob
+
+if [ ${#SCRIPT_FILE_PATHS[@]} -eq 0 ]; then
+  printf '\n%s⚠️  No Forge scripts found in %s%s\n' "$YELLOW" "$FORGE_SCRIPTS_DIR" "$RESET"
+  exit 1
 fi
 
-# Prompt for broadcast/dry-run
-echo ""
-echo "Broadcast or dry run?"
-echo "  1) Broadcast"
-echo "  2) Dry run"
-read -p "Enter choice [1-2]: " broadcast_choice
+SCRIPTS=()
+for path in "${SCRIPT_FILE_PATHS[@]}"; do
+  filename="$(basename "$path")"
+  SCRIPTS+=("${filename%.s.sol}")
+done
 
-if [ -z "$broadcast_choice" ] || ([ "$broadcast_choice" -ne 1 ] && [ "$broadcast_choice" -ne 2 ]); then
-  echo "Error: Invalid choice"
+IFS=$'\n' SCRIPTS=($(printf '%s\n' "${SCRIPTS[@]}" | sort))
+unset IFS
+
+print_section "Available scripts"
+for script in "${SCRIPTS[@]}"; do
+  printf '  • %s\n' "$script"
+done
+
+print_section "Choose environment"
+for i in "${!ENVIRONMENTS[@]}"; do
+  printf '  %2d) %s\n' "$((i + 1))" "${ENVIRONMENTS[$i]}"
+done
+printf '\n'
+read -rp "${BOLD}Environment${RESET} > " env_choice
+
+if ! [[ "$env_choice" =~ ^[0-9]+$ ]] || [ "$env_choice" -lt 1 ] || [ "$env_choice" -gt "${#ENVIRONMENTS[@]}" ]; then
+  printf '\n%sInvalid choice.%s\n' "$YELLOW" "$RESET"
+  exit 1
+fi
+
+ENVIRONMENT="${ENVIRONMENTS[$((env_choice - 1))]}"
+ENV_FILE=".env.${ENVIRONMENT}"
+ENV_FILE_ABS="${PROJECT_ROOT}/${ENV_FILE}"
+
+if [ "$ENVIRONMENT" = "local" ]; then
+  print_section "Local environment setup"
+  printf '  %s▶️ Start Anvil in another terminal%s\n' "$DIM" "$RESET"
+  printf '    cd %s\n' "$PROJECT_ROOT"
+  printf '    anvil --host 0.0.0.0 --port 8545 --steps-tracing\n'
+  printf '\n'
+  read -rp "🕒 Press Enter once Anvil is running..."
+fi
+
+print_section "Choose mode"
+printf '  1) Broadcast (write to chain)\n'
+printf '  2) Dry run (simulates)\n'
+printf '\n'
+read -rp "${BOLD}Mode${RESET} > " broadcast_choice
+
+if ! [[ "$broadcast_choice" =~ ^[1-2]$ ]]; then
+  printf '\n%sInvalid choice.%s\n' "$YELLOW" "$RESET"
   exit 1
 fi
 
@@ -58,109 +156,96 @@ if [ "$broadcast_choice" -eq 2 ]; then
   DRY_RUN="true"
 fi
 
-# Prompt for script selection
-echo ""
-echo "What script?"
-echo "Select from:"
-for i in "${!SCRIPTS[@]}"; do
-  echo "  $((i+1))) ${SCRIPTS[$i]}"
-done
-read -p "Enter choice [1-${#SCRIPTS[@]}]: " script_choice
-
-if [ -z "$script_choice" ] || [ "$script_choice" -lt 1 ] || [ "$script_choice" -gt "${#SCRIPTS[@]}" ]; then
-  echo "Error: Invalid choice"
-  exit 1
+MODE_LABEL="broadcast"
+if [ "$DRY_RUN" = "true" ]; then
+  MODE_LABEL="dry run"
 fi
 
-SCRIPT_NAME="${SCRIPTS[$((script_choice-1))]}"
+while true; do
+  print_section "Choose script"
+  for i in "${!SCRIPTS[@]}"; do
+    printf '  %2d) %s\n' "$((i + 1))" "${SCRIPTS[$i]}"
+  done
+  printf '\n'
+  read -rp "${BOLD}Script${RESET} > " script_choice
 
-# Determine project root (packages/contracts)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if ! [[ "$script_choice" =~ ^[0-9]+$ ]] || [ "$script_choice" -lt 1 ] || [ "$script_choice" -gt "${#SCRIPTS[@]}" ]; then
+    printf '\n%sInvalid choice.%s\n' "$YELLOW" "$RESET"
+    exit 1
+  fi
 
-case "$ENVIRONMENT" in
-  local)
-    ENV_FILE=".env.local"
-    RPC_URL="http://127.0.0.1:8545"
-    if [ ! -f "${SCRIPT_DIR}/${ENV_FILE}" ]; then
-      echo ""
-      echo "⚠️  Warning: $ENV_FILE not found!"
-      echo ""
-      echo "For local testing, you need to create $ENV_FILE with:"
-      echo "  PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-      echo "  INITIAL_OWNER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-      echo "  FEE_RECIPIENT=0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-      echo "  HUB_ADDRESS=0x0000000000000000000000000000000000000000"
-      echo "  USDC_ADDRESS=0x0000000000000000000000000000000000000000"
-      echo ""
-      echo "See LOCAL_TESTING.md for more details."
-      echo ""
-      read -p "Continue anyway? (y/N): " continue_choice
-      if [ "$continue_choice" != "y" ] && [ "$continue_choice" != "Y" ]; then
+  SCRIPT_NAME="${SCRIPTS[$((script_choice - 1))]}"
+
+  if [ ! -f "$ENV_FILE_ABS" ]; then
+    printf '\n%s⚠️  %s not found in %s%s\n' "$YELLOW" "$ENV_FILE" "$PROJECT_ROOT" "$RESET"
+    printf '%sCreate the file with the required environment variables before proceeding.%s\n' "$DIM" "$RESET"
+    exit 1
+  fi
+
+  set +e
+  set -a
+  source "$ENV_FILE_ABS" 2>/dev/null
+  set +a
+  set -e
+
+  if [ -z "${PRIVATE_KEY:-}" ]; then
+    printf '\n%s⚠️  PRIVATE_KEY not found in %s%s\n' "$YELLOW" "$ENV_FILE" "$RESET"
+    printf '%sAdd a PRIVATE_KEY value so Forge can sign transactions.%s\n' "$DIM" "$RESET"
+    if [ "$ENVIRONMENT" = "local" ]; then
+      printf '\n'
+      printf '%s💡 Anvil tip:%s PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80\n' "$DIM" "$RESET"
+      printf '\n'
+      read -rp "🕒 Press Enter once PRIVATE_KEY has been added to .env.local..."
+      set +e
+      set -a
+      source "$ENV_FILE_ABS" 2>/dev/null
+      set +a
+      set -e
+      if [ -z "${PRIVATE_KEY:-}" ]; then
+        printf '\n%s⚠️  PRIVATE_KEY still not found in %s%s\n' "$YELLOW" "$ENV_FILE" "$RESET"
         exit 1
       fi
+    else
+      exit 1
     fi
-    ;;
-  mainnet)
-    ENV_FILE=".env.base"
-    RPC_URL="base"
-    ;;
-  testnet)
-    ENV_FILE=".env.base_sepolia"
-    RPC_URL="base_sepolia"
-    ;;
-  *)
-    echo "Error: Unknown environment '$ENVIRONMENT'"
-    exit 1
-    ;;
-esac
-
-ENV_FILE_ABS="${SCRIPT_DIR}/${ENV_FILE}"
-if [ ! -f "$ENV_FILE_ABS" ]; then
-  echo ""
-  echo "⚠️  Error: $ENV_FILE not found!"
-  echo ""
-  echo "Please create $ENV_FILE with required environment variables:"
-  echo "  - PRIVATE_KEY (hex-encoded private key)"
-  echo "  - HUB_ADDRESS (contract address)"
-  echo "  - Other script-specific variables (see script/README.md)"
-  echo ""
-  exit 1
-fi
-
-# Load env vars with automatic exporting for child process
-set +e
-set -a
-source "$ENV_FILE_ABS" 2>/dev/null
-set +a
-set -e
-
-if [ -z "$PRIVATE_KEY" ]; then
-  echo ""
-  echo "⚠️  Error: PRIVATE_KEY not found in $ENV_FILE!"
-  echo ""
-  echo "The script needs PRIVATE_KEY to sign transactions."
-  if [ "$ENVIRONMENT" = "local" ]; then
-    echo ""
-    echo "For local testing with Anvil, use:"
-    echo "  PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-    echo ""
-    echo "This is the first account's private key from Anvil's deterministic accounts."
   fi
-  exit 1
-fi
 
-SCRIPT_PATH="script/${SCRIPT_NAME}.s.sol"
-BROADCAST_FLAG=""
-if [ "$DRY_RUN" = "false" ]; then
-  BROADCAST_FLAG="--broadcast"
-fi
+  RPC_URL="$ENVIRONMENT"
+  if [ "$ENVIRONMENT" = "local" ]; then
+    RPC_URL="http://127.0.0.1:8545"
+  fi
 
-echo ""
-echo "Running:"
-echo "  Environment: $ENVIRONMENT"
-echo "  Mode: $([ "$DRY_RUN" = "false" ] && echo "Broadcast" || echo "Dry run")"
-echo "  Script: $SCRIPT_NAME"
-echo ""
+  SCRIPT_PATH="script/${SCRIPT_NAME}.s.sol"
+  BROADCAST_FLAG=""
+  if [ "$DRY_RUN" = "false" ]; then
+    BROADCAST_FLAG="--broadcast"
+  fi
 
-(cd "$SCRIPT_DIR" && bash -lc "source '${ENV_FILE_ABS}' && forge script ${SCRIPT_PATH} --rpc-url ${RPC_URL} ${BROADCAST_FLAG}")
+  print_section "Summary"
+  printf '  Environment : %s\n' "$ENVIRONMENT"
+  printf '  Mode        : %s\n' "$MODE_LABEL"
+  printf '  Script      : %s\n' "$SCRIPT_NAME"
+  printf '  RPC URL     : %s\n' "$RPC_URL"
 
+  set +e
+  (cd "$PROJECT_ROOT" && bash -lc "source '${ENV_FILE_ABS}' && forge script ${SCRIPT_PATH} --rpc-url ${RPC_URL} ${BROADCAST_FLAG}")
+  FORGE_EXIT_CODE=$?
+  set -e
+
+  speak_success "🫡 Done."
+
+  print_section "Would you like to run another script?"
+  printf '  1) Yes\n'
+  printf '  2) No\n'
+  printf '\n'
+  read -rp "${BOLD}Choice${RESET} > " continue_choice
+
+  if ! [[ "$continue_choice" =~ ^[1-2]$ ]]; then
+    printf '\n%sInvalid choice. Exiting.%s\n' "$YELLOW" "$RESET"
+    exit $FORGE_EXIT_CODE
+  fi
+
+  if [ "$continue_choice" -eq 2 ]; then
+    exit $FORGE_EXIT_CODE
+  fi
+done

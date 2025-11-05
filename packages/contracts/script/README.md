@@ -114,6 +114,25 @@ HUB_ADDRESS=0x... DEFAULT_TOKEN=0x036CbD53842c5426634e7929541eC2318f3dCF7e \
 
 Updates the base price for an active round.
 
+### SetSchedule.s.sol
+
+Configures the automatic duration reduction schedule. Must be run before the first round is created.
+
+**Required Environment Variables:**
+- `HUB_ADDRESS` - Address of the deployed ButtonHub contract
+- `PRIVATE_KEY` - Hex-encoded private key used to sign the transaction
+- `SCHEDULE_REDUCE_BY_SECONDS` - Seconds to subtract from the duration each reduction step
+- `SCHEDULE_EVERY_N_ROUNDS` - Number of rounds between each reduction
+- `SCHEDULE_MIN_DURATION` - Minimum round duration (seconds) that the schedule will clamp to
+
+**Example:**
+```bash
+# Drop duration by 60 seconds every 5 rounds down to 120 seconds
+HUB_ADDRESS=0x... PRIVATE_KEY=0x... \
+SCHEDULE_REDUCE_BY_SECONDS=60 SCHEDULE_EVERY_N_ROUNDS=5 SCHEDULE_MIN_DURATION=120 \
+forge script script/SetSchedule.s.sol --rpc-url base_sepolia --broadcast
+```
+
 **Required Environment Variables:**
 - `HUB_ADDRESS` - Address of the deployed ButtonHub contract
 - `ROUND_ID` - ID of the round to update

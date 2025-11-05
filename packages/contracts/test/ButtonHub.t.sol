@@ -70,6 +70,9 @@ contract ButtonHubTest is Test {
 
     vm.prank(owner);
     token.approve(address(hub), type(uint256).max);
+
+    vm.prank(owner);
+    hub.setDurationReductionSchedule(1, 1, ROUND_DURATION);
   }
 
   function _getStartRoundParams() internal view returns (ButtonHub.StartRoundParams memory) {
@@ -145,6 +148,20 @@ contract ButtonHubTest is Test {
     assertTrue(state.active);
     assertFalse(state.finalized);
     assertEq(state.potBalance, BASE_PRICE);
+  }
+
+  function test_StartRound_RevertsWhenScheduleNotConfigured() public {
+    ButtonHub newHub = new ButtonHub(owner, address(token));
+
+    vm.prank(owner);
+    token.approve(address(newHub), type(uint256).max);
+
+    ButtonHub.StartRoundParams memory params = _getStartRoundParams();
+
+    vm.startPrank(owner);
+    vm.expectRevert(ButtonHub.DurationScheduleNotConfigured.selector);
+    newHub.startRound(params);
+    vm.stopPrank();
   }
 
   function test_StartRound_NonOwnerRevertsWhenNotPermissionless() public {
