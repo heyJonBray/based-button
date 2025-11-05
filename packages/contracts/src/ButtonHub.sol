@@ -156,6 +156,9 @@ contract ButtonHub is ReentrancyGuard, Ownable {
   /// @notice Raised when token address is invalid.
   error InvalidToken();
 
+  /// @notice Raised when pot seed does not match required amount.
+  error PotSeedMismatch(uint256 potSeed, uint256 basePrice);
+
   /// @notice Raised when pricing model not supported in MVP.
   error InvalidPricingModel(uint8 model);
 
@@ -210,10 +213,8 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
     latestRoundId = roundId;
 
-    if (params.potSeed > 0) {
-      IERC20(token).safeTransferFrom(msg.sender, address(this), params.potSeed);
-      state.potBalance = params.potSeed;
-    }
+    IERC20(token).safeTransferFrom(msg.sender, address(this), params.potSeed);
+    state.potBalance = params.potSeed;
 
     emit RoundStarted(
       token,
@@ -378,6 +379,9 @@ contract ButtonHub is ReentrancyGuard, Ownable {
     if (params.roundDuration == 0) revert InvalidDuration();
     if (params.roundDuration > MAX_ROUND_DURATION) revert InvalidDuration();
     if (params.basePrice == 0) revert InvalidBasePrice();
+    if (params.potSeed != params.basePrice) {
+      revert PotSeedMismatch(params.potSeed, params.basePrice);
+    }
 
     if (block.timestamp > type(uint64).max - params.roundDuration) {
       revert InvalidDuration();

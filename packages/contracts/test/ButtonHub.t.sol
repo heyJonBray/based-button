@@ -67,6 +67,9 @@ contract ButtonHubTest is Test {
     token.mint(player2, 1000e6);
     token.mint(owner, 1000e6);
     token.mint(feeRecipient, 1000e6);
+
+    vm.prank(owner);
+    token.approve(address(hub), type(uint256).max);
   }
 
   function _getStartRoundParams() internal view returns (ButtonHub.StartRoundParams memory) {
@@ -79,14 +82,16 @@ contract ButtonHubTest is Test {
       pricingModel: 0,
       pricingData: "",
       basePrice: BASE_PRICE,
-      potSeed: 0
+      potSeed: BASE_PRICE
     });
   }
 
   function _startRoundAsOwner() internal returns (uint256 roundId) {
-    vm.prank(owner);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
-    return hub.startRound(params);
+    vm.startPrank(owner);
+    IERC20(token).approve(address(hub), type(uint256).max);
+    roundId = hub.startRound(params);
+    vm.stopPrank();
   }
 
   function _approveAndPlay(address player, uint256 roundId, uint256 maxPrice) internal {
@@ -111,8 +116,9 @@ contract ButtonHubTest is Test {
   // ========== StartRound Tests ==========
 
   function test_StartRound_OwnerCanStart() public {
-    vm.prank(owner);
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
+    vm.prank(owner);
+    IERC20(token).approve(address(hub), type(uint256).max);
 
     vm.expectEmit(true, true, false, false);
     emit RoundStarted(
@@ -127,6 +133,7 @@ contract ButtonHubTest is Test {
       0 // pricingModel
     );
 
+    vm.prank(owner);
     uint256 roundId = hub.startRound(params);
 
     assertEq(roundId, 1);
@@ -137,6 +144,7 @@ contract ButtonHubTest is Test {
     assertEq(config.feeBps, FEE_BPS);
     assertTrue(state.active);
     assertFalse(state.finalized);
+    assertEq(state.potBalance, BASE_PRICE);
   }
 
   function test_StartRound_NonOwnerRevertsWhenNotPermissionless() public {
@@ -151,14 +159,13 @@ contract ButtonHubTest is Test {
     hub.setPermissionlessRoundStart(true);
 
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
-    params.potSeed = 10e6; // Player deposits initial pot
     vm.startPrank(player1);
-    IERC20(token).approve(address(hub), 10e6);
+    IERC20(token).approve(address(hub), params.potSeed);
     uint256 roundId = hub.startRound(params);
     vm.stopPrank();
 
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
-    assertEq(state.potBalance, 10e6);
+    assertEq(state.potBalance, params.potSeed);
   }
 
   function test_StartRound_RevertsWhenLastRoundLocked() public {
@@ -173,6 +180,7 @@ contract ButtonHubTest is Test {
 
   function test_StartRound_WithPotSeed() public {
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
+    params.basePrice = 50e6;
     params.potSeed = 50e6;
     vm.startPrank(owner);
     IERC20(token).approve(address(hub), 50e6);
@@ -181,6 +189,20 @@ contract ButtonHubTest is Test {
 
     (, ButtonHub.RoundState memory state) = _getRoundData(roundId);
     assertEq(state.potBalance, 50e6);
+  }
+
+  function test_StartRound_RevertsWhenPotSeedMismatch() public {
+    ButtonHub.StartRoundParams memory params = _getStartRoundParams();
+    params.potSeed = params.basePrice / 2;
+
+    vm.prank(owner);
+    IERC20(token).approve(address(hub), params.potSeed);
+
+    vm.expectRevert(
+      abi.encodeWithSelector(ButtonHub.PotSeedMismatch.selector, params.potSeed, params.basePrice)
+    );
+    vm.prank(owner);
+    hub.startRound(params);
   }
 
   function test_StartRound_RevertsWhenPreviousRoundActive() public {
@@ -269,7 +291,7 @@ contract ButtonHubTest is Test {
 
   function test_Play_Success() public {
     uint256 roundId = _startRoundAsOwner();
-    uint256 initialPot = 0;
+    uint256 initialPot = BASE_PRICE;
     uint256 initialFeeEscrow = 0;
 
     uint256 expectedPot = initialPot + (BASE_PRICE * 90 / 100);
