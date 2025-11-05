@@ -3,7 +3,7 @@
 ## 1. Components
 
 - ButtonHub:
-  - Manages sequential rounds per token/series and enforces cooldowns.
+  - Manages sequential rounds for a single token and enforces cooldowns.
   - Stores per-round configuration/state and escrows fees until withdrawn.
   - Exposes `startRound`, `play`, `finalize`, `withdrawFees`.
 - ButtonGameFactory:
@@ -21,7 +21,7 @@ RoundConfig {
   address token;            // ERC-20 used for plays
   uint256 basePrice;        // token units, e.g., USDC 6 decimals
   uint64  roundDuration;    // seconds per extension
-  uint32  cooldownSeconds;  // min delay before next round in same series
+  uint32  cooldownSeconds;  // min delay before next round
   uint16  feeBps;           // dev/treasury fee in basis points
   address feeRecipient;     // withdrawer of accrued fees
   uint8   pricingModel;     // 0 = fixed (MVP)
@@ -30,7 +30,6 @@ RoundConfig {
 
 RoundState {
   uint256 roundId;          // globally unique round identifier
-  uint64  seriesId;         // groups sequential rounds (e.g., per token)
   uint64  startTime;
   uint64  deadline;
   uint64  endTime;          // set on finalize
@@ -48,12 +47,11 @@ Supporting storage helpers:
 
 - `mapping(uint256 => RoundConfig) roundConfig`
 - `mapping(uint256 => RoundState) roundState`
-- `mapping(uint64 => uint256) latestRoundId` keyed by `seriesId`
-- `mapping(address => uint256) feeBalances` if aggregating fees by recipient.
+- `uint256 latestRoundId` - tracks the most recent round for cooldown enforcement
 
-## 3. Series & Cooldowns
+## 3. Sequential Rounds & Cooldowns
 
-- `seriesId` groups sequential rounds (e.g., hash of token + namespace).
-- `startRound` checks the latest round in the series is finalized and `block.timestamp ≥ nextStartTime`.
+- The contract manages one round at a time for a single token.
+- `startRound` checks the latest round is finalized and `block.timestamp ≥ nextStartTime`.
 - `finalize` stamps `nextStartTime = block.timestamp + cooldownSeconds` and flips `active`/`finalized` flags.
 - Default `cooldownSeconds = 0`, enabling immediate restarts while preserving hook for throttling.
