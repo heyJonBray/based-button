@@ -15,7 +15,6 @@ contract Deploy is Script {
 
     require(owner != address(0), "Invalid owner address");
     require(usdcToken != address(0), "Invalid USDC address");
-    require(privateKey != 0, "PRIVATE_KEY must be set");
 
     vm.startBroadcast(privateKey);
     new ButtonHub(owner, usdcToken);

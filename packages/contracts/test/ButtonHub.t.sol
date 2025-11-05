@@ -225,9 +225,19 @@ contract ButtonHubTest is Test {
   function test_StartRound_ValidationErrors() public {
     ButtonHub.StartRoundParams memory params = _getStartRoundParams();
 
-    params.feeBps = 10001;
+    // Test max fee: 50%
+    params.feeBps = 5000;
     vm.prank(owner);
-    vm.expectRevert(abi.encodeWithSelector(ButtonHub.FeeTooHigh.selector, uint16(10001)));
+    hub.startRound(params);
+    vm.prank(owner);
+    hub.setLastRound(true);
+
+    // Test > max fee
+    params.feeBps = 5001;
+    vm.prank(owner);
+    hub.setLastRound(false);
+    vm.prank(owner);
+    vm.expectRevert(abi.encodeWithSelector(ButtonHub.FeeTooHigh.selector, uint16(5001)));
     hub.startRound(params);
 
     params.feeBps = FEE_BPS;

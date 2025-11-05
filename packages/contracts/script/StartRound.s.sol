@@ -38,8 +38,6 @@ contract StartRound is Script {
       potSeed: potSeed
     });
 
-    require(privateKey != 0, "PRIVATE_KEY must be set");
-
     vm.startBroadcast(privateKey);
     uint256 roundId = hub.startRound(params);
     vm.stopBroadcast();

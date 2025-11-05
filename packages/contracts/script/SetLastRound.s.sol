@@ -15,16 +15,16 @@ contract SetLastRound is Script {
     ButtonHub hub = ButtonHub(hubAddress);
 
     uint256 privateKey = vm.envUint("PRIVATE_KEY");
-    require(privateKey != 0, "PRIVATE_KEY must be set");
 
     vm.startBroadcast(privateKey);
     try hub.setLastRound(locked) {
       console.log("Successfully set last round lock");
+      vm.stopBroadcast();
     } catch Error(string memory reason) {
+      vm.stopBroadcast();
       console.log("Error setting last round lock:", reason);
       revert(reason);
     }
-    vm.stopBroadcast();
 
     console.log("Last round lock set to:", locked ? "locked" : "unlocked");
     console.log("Block:", block.number);
