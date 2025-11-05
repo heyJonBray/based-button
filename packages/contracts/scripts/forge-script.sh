@@ -15,6 +15,7 @@ SCRIPTS=(
   "UpdateBasePrice"
 )
 
+# Prompt for environment selection
 echo "What environment?"
 echo "Select from:"
 for i in "${!ENVIRONMENTS[@]}"; do
@@ -40,6 +41,7 @@ if [ "$ENVIRONMENT" = "local" ]; then
   read -p "Press Enter once Anvil is running in another terminal..."
 fi
 
+# Prompt for broadcast/dry-run
 echo ""
 echo "Broadcast or dry run?"
 echo "  1) Broadcast"
@@ -56,6 +58,7 @@ if [ "$broadcast_choice" -eq 2 ]; then
   DRY_RUN="true"
 fi
 
+# Prompt for script selection
 echo ""
 echo "What script?"
 echo "Select from:"
@@ -71,11 +74,14 @@ fi
 
 SCRIPT_NAME="${SCRIPTS[$((script_choice-1))]}"
 
+# Determine project root (packages/contracts)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 case "$ENVIRONMENT" in
   local)
     ENV_FILE=".env.local"
     RPC_URL="http://127.0.0.1:8545"
-    if [ ! -f "$ENV_FILE" ]; then
+    if [ ! -f "${SCRIPT_DIR}/${ENV_FILE}" ]; then
       echo ""
       echo "⚠️  Warning: $ENV_FILE not found!"
       echo ""
@@ -108,8 +114,8 @@ case "$ENVIRONMENT" in
     ;;
 esac
 
-# Check if environment file exists (for mainnet/testnet too)
-if [ ! -f "$ENV_FILE" ]; then
+ENV_FILE_ABS="${SCRIPT_DIR}/${ENV_FILE}"
+if [ ! -f "$ENV_FILE_ABS" ]; then
   echo ""
   echo "⚠️  Error: $ENV_FILE not found!"
   echo ""
@@ -121,12 +127,13 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# Source the env file to check for required variables
-set +e  # Temporarily disable exit on error for validation
-source "$ENV_FILE" 2>/dev/null
-set -e  # Re-enable exit on error
+# Load env vars with automatic exporting for child process
+set +e
+set -a
+source "$ENV_FILE_ABS" 2>/dev/null
+set +a
+set -e
 
-# Check if PRIVATE_KEY is set (required for all scripts)
 if [ -z "$PRIVATE_KEY" ]; then
   echo ""
   echo "⚠️  Error: PRIVATE_KEY not found in $ENV_FILE!"
@@ -142,14 +149,12 @@ if [ -z "$PRIVATE_KEY" ]; then
   exit 1
 fi
 
-# Build forge script command
 SCRIPT_PATH="script/${SCRIPT_NAME}.s.sol"
 BROADCAST_FLAG=""
 if [ "$DRY_RUN" = "false" ]; then
   BROADCAST_FLAG="--broadcast"
 fi
 
-# Display selected options
 echo ""
 echo "Running:"
 echo "  Environment: $ENVIRONMENT"
@@ -157,6 +162,5 @@ echo "  Mode: $([ "$DRY_RUN" = "false" ] && echo "Broadcast" || echo "Dry run")"
 echo "  Script: $SCRIPT_NAME"
 echo ""
 
-# Source the environment file and run the forge script
-bash -lc "source ${ENV_FILE} && forge script ${SCRIPT_PATH} --rpc-url ${RPC_URL} ${BROADCAST_FLAG}"
+(cd "$SCRIPT_DIR" && bash -lc "source '${ENV_FILE_ABS}' && forge script ${SCRIPT_PATH} --rpc-url ${RPC_URL} ${BROADCAST_FLAG}")
 
