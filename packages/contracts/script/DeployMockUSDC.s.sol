@@ -7,7 +7,6 @@ import { MockERC20 } from "../test/mocks/MockERC20.sol";
 contract DeployMockUSDC is Script {
   function run() external {
     uint256 privateKey = vm.envUint("PRIVATE_KEY");
-    require(privateKey != 0, "PRIVATE_KEY must be set");
 
     vm.startBroadcast(privateKey);
     MockERC20 usdc = new MockERC20("Mock USDC", "USDC", 6);

@@ -9,8 +9,10 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 contract ButtonHub is ReentrancyGuard, Ownable {
   using SafeERC20 for IERC20;
 
-  uint256 private constant MAX_FEE_BPS = 10_000;
+  uint256 private constant MAX_FEE_BPS = 5_000; // 5000 bps = 50%
+  uint256 private constant BPS_DIVISOR = 10_000;
   uint8 internal constant PRICING_FIXED = 0;
+  uint64 private constant MAX_ROUND_DURATION = 12 hours;
 
   /// @notice Immutable parameters for a round.
   struct RoundConfig {
@@ -239,13 +241,17 @@ contract ButtonHub is ReentrancyGuard, Ownable {
     IERC20(config.token).safeTransferFrom(msg.sender, address(this), price);
     uint256 received = IERC20(config.token).balanceOf(address(this)) - before;
 
-    uint256 fee = (received * config.feeBps) / MAX_FEE_BPS;
+    uint256 fee = (received * config.feeBps) / BPS_DIVISOR;
     uint256 potContribution = received - fee;
 
     state.potBalance += potContribution;
     state.feeEscrow += fee;
     state.plays += 1;
     state.currentWinner = msg.sender;
+
+    if (block.timestamp > type(uint64).max - config.roundDuration) {
+      revert InvalidDuration();
+    }
     state.deadline = uint64(block.timestamp + config.roundDuration);
 
     emit Play(roundId, msg.sender, received, state.potBalance, state.feeEscrow, state.deadline);
@@ -327,9 +333,8 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
   /// @notice Returns mutable state snapshot for a round.
   function getRoundState(uint256 roundId) external view returns (RoundState memory) {
-    RoundState memory state = roundState[roundId];
-    if (roundConfig[roundId].token == address(0)) revert RoundDoesNotExist(roundId);
-    return state;
+    (, RoundState storage stateStorage) = _requireRound(roundId);
+    return stateStorage;
   }
 
   /// @notice Returns the current price required to play the given round.
@@ -371,7 +376,12 @@ contract ButtonHub is ReentrancyGuard, Ownable {
     if (params.feeBps > MAX_FEE_BPS) revert FeeTooHigh(params.feeBps);
     if (params.feeRecipient == address(0)) revert InvalidAddress();
     if (params.roundDuration == 0) revert InvalidDuration();
+    if (params.roundDuration > MAX_ROUND_DURATION) revert InvalidDuration();
     if (params.basePrice == 0) revert InvalidBasePrice();
+
+    if (block.timestamp > type(uint64).max - params.roundDuration) {
+      revert InvalidDuration();
+    }
     if (params.pricingModel != PRICING_FIXED) revert InvalidPricingModel(params.pricingModel);
 
     token = params.token == address(0) ? defaultToken : params.token;

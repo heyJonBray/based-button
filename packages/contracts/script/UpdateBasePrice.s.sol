@@ -10,6 +10,7 @@ contract UpdateBasePrice is Script {
     require(hubAddress != address(0), "HUB_ADDRESS must be set");
 
     uint256 roundId = vm.envUint("ROUND_ID");
+    require(roundId > 0, "ROUND_ID must be greater than 0");
     uint256 newPrice = vm.envUint("NEW_PRICE");
     require(newPrice > 0, "NEW_PRICE must be greater than 0");
 
@@ -24,7 +25,6 @@ contract UpdateBasePrice is Script {
     }
 
     uint256 privateKey = vm.envUint("PRIVATE_KEY");
-    require(privateKey != 0, "PRIVATE_KEY must be set");
 
     vm.startBroadcast(privateKey);
     hub.updateBasePrice(roundId, newPrice);
