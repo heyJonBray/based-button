@@ -11,11 +11,13 @@ contract Deploy is Script {
   function run() external {
     address owner = vm.envOr("INITIAL_OWNER", JON);
     address usdcToken = vm.envOr("USDC_ADDRESS", BASE_SEPOLIA_USDC_ADDRESS);
+    uint256 privateKey = vm.envUint("PRIVATE_KEY");
 
     require(owner != address(0), "Invalid owner address");
     require(usdcToken != address(0), "Invalid USDC address");
+    require(privateKey != 0, "PRIVATE_KEY must be set");
 
-    vm.startBroadcast();
+    vm.startBroadcast(privateKey);
     new ButtonHub(owner, usdcToken);
     vm.stopBroadcast();
   }

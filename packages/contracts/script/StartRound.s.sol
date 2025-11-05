@@ -22,6 +22,7 @@ contract StartRound is Script {
     require(feeRecipient != address(0), "FEE_RECIPIENT must be set");
     uint256 basePrice = vm.envOr("BASE_PRICE", uint256(1e6)); // 1 USDC (6 decimals)
     uint256 potSeed = vm.envOr("POT_SEED", uint256(0)); // 0 = no seed
+    uint256 privateKey = vm.envUint("PRIVATE_KEY");
 
     address tokenAddress = token == address(0) ? hub.defaultToken() : token;
 
@@ -37,7 +38,9 @@ contract StartRound is Script {
       potSeed: potSeed
     });
 
-    vm.startBroadcast();
+    require(privateKey != 0, "PRIVATE_KEY must be set");
+
+    vm.startBroadcast(privateKey);
     uint256 roundId = hub.startRound(params);
     vm.stopBroadcast();
 

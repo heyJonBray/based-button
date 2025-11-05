@@ -4,10 +4,11 @@ Scripts for interacting with the ButtonHub contract.
 
 ## Common Setup
 
-All scripts require the `HUB_ADDRESS` environment variable:
+All scripts require the `HUB_ADDRESS` and `PRIVATE_KEY` environment variables:
 
 ```bash
 export HUB_ADDRESS=0x...
+export PRIVATE_KEY=0x...
 ```
 
 Recommend keeping `.env.base` and `.env.base_sepolia` and sourcing before running scripts
@@ -29,9 +30,10 @@ Starts a new round on the ButtonHub.
 **Required Environment Variables:**
 - `HUB_ADDRESS` - Address of the deployed ButtonHub contract
 - `FEE_RECIPIENT` - Address that will receive fees
+- `PRIVATE_KEY` - Hex-encoded private key used to sign the transaction
 
 **Optional Environment Variables (with defaults):**
-- `ROUND_TOKEN` - Token address (default: address(0), uses hub.defaultToken())
+- `TOKEN` - Token address (default: address(0), uses hub.defaultToken())
 - `ROUND_DURATION` - Round duration in seconds (default: 600 = 10 minutes)
 - `COOLDOWN_SECONDS` - Cooldown before next round (default: 0 = immediate)
 - `FEE_BPS` - Fee in basis points (default: 1000 = 10%)
@@ -54,9 +56,10 @@ Enables or disables permissionless round starts.
 
 **Required Environment Variables:**
 - `HUB_ADDRESS` - Address of the deployed ButtonHub contract
+- `PRIVATE_KEY` - Hex-encoded private key used to sign the transaction
 
 **Optional Environment Variables:**
-- `PERMISSIONLESS_ROUND_ENABLED` - Set to true to enable, false to disable (default: true)
+- `PERMISSIONLESS_ROUND_ENABLED` - Set to true to enable, false to disable (default: false)
 
 **Example:**
 ```bash
@@ -73,9 +76,10 @@ Locks the contract to prevent new rounds from starting (useful for migration).
 
 **Required Environment Variables:**
 - `HUB_ADDRESS` - Address of the deployed ButtonHub contract
+- `PRIVATE_KEY` - Hex-encoded private key used to sign the transaction
 
 **Optional Environment Variables:**
-- `CONTRACT_LOCKED` - Set to true to lock, false to unlock (default: true)
+- `CONTRACT_LOCKED` - Set to true to lock, false to unlock (default: false)
 
 **Example:**
 ```bash
@@ -93,6 +97,7 @@ Updates the default token address used when starting rounds.
 **Required Environment Variables:**
 - `HUB_ADDRESS` - Address of the deployed ButtonHub contract
 - `DEFAULT_TOKEN` - New default token address
+- `PRIVATE_KEY` - Hex-encoded private key used to sign the transaction
 
 **Example:**
 ```bash
@@ -113,6 +118,7 @@ Updates the base price for an active round.
 - `HUB_ADDRESS` - Address of the deployed ButtonHub contract
 - `ROUND_ID` - ID of the round to update
 - `NEW_PRICE` - New base price
+- `PRIVATE_KEY` - Hex-encoded private key used to sign the transaction
 
 **Example:**
 ```bash
