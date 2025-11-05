@@ -12,7 +12,8 @@
 		"dev": "bun run -A scripts/dev-all.ts",
 		"format": "biome format --write .",
 		"lint": "biome lint .",
-		"check": "biome check ."
+		"check": "biome check .",
+		"code-review:develop": "coderabbit --prompt-only -t all --base-commit develop"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.0",
