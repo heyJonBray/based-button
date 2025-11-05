@@ -11,16 +11,21 @@ contract SetLastRound is Script {
 
     bool locked = vm.envOr("CONTRACT_LOCKED", false);
 
+    require(hubAddress.code.length > 0, "HUB_ADDRESS must be a contract");
     ButtonHub hub = ButtonHub(hubAddress);
 
     vm.startBroadcast();
-    hub.setLastRound(locked);
+    try hub.setLastRound(locked) {
+      console.log("Successfully set last round lock");
+    } catch Error(string memory reason) {
+      console.log("Error setting last round lock:", reason);
+      revert(reason);
+    }
     vm.stopBroadcast();
 
-    console.log("Last round lock set to:", locked);
-    if (locked) {
-      console.log("WARNING: No new rounds can be started after the current round ends!");
-    }
+    console.log("Last round lock set to:", locked ? "locked" : "unlocked");
+    console.log("Block:", block.number);
+    console.log("Hub address:", hubAddress);
   }
 }
 

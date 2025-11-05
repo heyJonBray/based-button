@@ -11,6 +11,7 @@ contract SetPermissionlessRoundStart is Script {
 
     bool enabled = vm.envOr("PERMISSIONLESS_ROUND_ENABLED", false);
 
+    require(hubAddress.code.length > 0, "HUB_ADDRESS is not a contract");
     ButtonHub hub = ButtonHub(hubAddress);
 
     vm.startBroadcast();
