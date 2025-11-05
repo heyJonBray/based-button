@@ -18,6 +18,11 @@ contract UpdateBasePrice is Script {
     ButtonHub.RoundConfig memory config = hub.getRoundConfig(roundId);
     uint256 oldPrice = config.basePrice;
 
+    if (oldPrice == newPrice) {
+      console.log("Price is already set to:", newPrice);
+      return;
+    }
+
     vm.startBroadcast();
     hub.updateBasePrice(roundId, newPrice);
     vm.stopBroadcast();

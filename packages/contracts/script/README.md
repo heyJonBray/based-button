@@ -10,6 +10,16 @@ All scripts require the `HUB_ADDRESS` environment variable:
 export HUB_ADDRESS=0x...
 ```
 
+Recommend keeping `.env.base` and `.env.base_sepolia` and sourcing before running scripts
+
+```bash
+# Mainnet
+source .env.base
+
+# Testnet
+source .env.base_sepolia
+```
+
 ## Scripts
 
 ### StartRound.s.sol

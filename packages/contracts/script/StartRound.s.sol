@@ -14,8 +14,10 @@ contract StartRound is Script {
     // Read parameters from environment or use defaults
     address token = vm.envOr("TOKEN", address(0)); // address(0) uses defaultToken
     uint64 roundDuration = uint64(vm.envOr("ROUND_DURATION", uint256(600))); // 10 minutes default
+    require(roundDuration > 60, "ROUND_DURATION must be > 60 seconds");
     uint32 cooldownSeconds = uint32(vm.envOr("COOLDOWN_SECONDS", uint256(0))); // 0 = immediate
     uint16 feeBps = uint16(vm.envOr("FEE_BPS", uint256(1000))); // 10% default
+    require(feeBps <= 10000, "FEE_BPS must be <= 10000");
     address feeRecipient = vm.envAddress("FEE_RECIPIENT");
     require(feeRecipient != address(0), "FEE_RECIPIENT must be set");
     uint256 basePrice = vm.envOr("BASE_PRICE", uint256(1e6)); // 1 USDC (6 decimals)
