@@ -27,7 +27,6 @@ contract ButtonHub is ReentrancyGuard, Ownable {
   /// @notice Mutable state for a round lifecycle.
   struct RoundState {
     uint256 roundId;
-    uint64 seriesId;
     uint64 startTime;
     uint64 deadline;
     uint64 endTime;
@@ -65,7 +64,6 @@ contract ButtonHub is ReentrancyGuard, Ownable {
   /// @notice Emitted when a new round begins.
   event RoundStarted(
     address indexed token,
-    uint64 indexed seriesId,
     uint256 indexed roundId,
     uint64 startTime,
     uint64 deadline,
@@ -167,10 +165,10 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
   mapping(uint256 => RoundConfig) internal roundConfig;
   mapping(uint256 => RoundState) internal roundState;
-  mapping(uint64 => uint256) internal latestRoundIdBySeries;
+  uint256 internal latestRoundId;
 
-  /// @notice Starts a new round for a given series.
-  function startRound(uint64 seriesId, StartRoundParams calldata params)
+  /// @notice Starts a new round.
+  function startRound(StartRoundParams calldata params)
     external
     nonReentrant
     returns (uint256 roundId)
@@ -180,7 +178,6 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
     address token = _validateStartParams(params);
 
-    uint256 latestRoundId = latestRoundIdBySeries[seriesId];
     if (latestRoundId != 0) {
       RoundState storage latestState = roundState[latestRoundId];
       if (!latestState.finalized) {
@@ -205,12 +202,11 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
     RoundState storage state = roundState[roundId];
     state.roundId = roundId;
-    state.seriesId = seriesId;
     state.startTime = uint64(block.timestamp);
     state.deadline = uint64(block.timestamp + params.roundDuration);
     state.active = true;
 
-    latestRoundIdBySeries[seriesId] = roundId;
+    latestRoundId = roundId;
 
     if (params.potSeed > 0) {
       IERC20(token).safeTransferFrom(msg.sender, address(this), params.potSeed);
@@ -219,7 +215,6 @@ contract ButtonHub is ReentrancyGuard, Ownable {
 
     emit RoundStarted(
       token,
-      seriesId,
       roundId,
       state.startTime,
       state.deadline,
@@ -356,16 +351,15 @@ contract ButtonHub is ReentrancyGuard, Ownable {
     return state.feeEscrow;
   }
 
-  /// @notice Returns the next eligible start timestamp for a series.
-  function getNextStartTime(uint64 seriesId) external view returns (uint256) {
-    uint256 latest = latestRoundIdBySeries[seriesId];
-    if (latest == 0) return 0;
-    return roundState[latest].nextStartTime;
+  /// @notice Returns the next eligible start timestamp for the next round.
+  function getNextStartTime() external view returns (uint256) {
+    if (latestRoundId == 0) return 0;
+    return roundState[latestRoundId].nextStartTime;
   }
 
-  /// @notice Returns the latest round id for a series (0 if none).
-  function getLatestRoundId(uint64 seriesId) external view returns (uint256) {
-    return latestRoundIdBySeries[seriesId];
+  /// @notice Returns the latest round id (0 if none).
+  function getLatestRoundId() external view returns (uint256) {
+    return latestRoundId;
   }
 
   /// @notice Validates input parameters for starting a round.
