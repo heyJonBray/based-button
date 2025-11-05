@@ -1,14 +1,69 @@
 {
-  "name": "@based-button/contracts",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "forge build",
-    "test": "forge test -vv",
-    "coverage": "forge coverage",
-    "lint": "echo \"solhint optional\"",
-    "fmt": "forge fmt",
-    "anvil": "anvil"
-  }
+	"name": "@based-button/contracts",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "forge build",
+		"clean": "forge clean",
+
+		"test": "forge test -vvv",
+		"coverage": "forge coverage",
+
+		"lint": "forge lint",
+		"fmt": "forge fmt",
+		"fmt:check": "forge fmt --check",
+
+		"anvil": "anvil",
+		"anvil:reset": "anvil --host 0.0.0.0 --port 8545 --mnemonic 'test test test test test test test test test test test junk' --steps-tracing",
+
+		"deploy:local:mock": "bash -lc 'source .env.local && forge script script/DeployMockUSDC.s.sol --rpc-url http://127.0.0.1:8545 --broadcast'",
+		"deploy:local": "bash -lc 'source .env.local && forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast'",
+		"deploy:local:dry": "bash -lc 'source .env.local && forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545'",
+
+		"deploy:mainnet": "bash -lc 'source .env.base && forge script script/Deploy.s.sol --rpc-url base --broadcast'",
+		"deploy:testnet": "bash -lc 'source .env.base_sepolia && forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast'",
+		"deploy:mainnet:dry": "bash -lc 'source .env.base && forge script script/Deploy.s.sol --rpc-url base'",
+		"deploy:testnet:dry": "bash -lc 'source .env.base_sepolia && forge script script/Deploy.s.sol --rpc-url base_sepolia'",
+
+		"start-round:local": "bash -lc 'source .env.local && forge script script/StartRound.s.sol --rpc-url http://127.0.0.1:8545 --broadcast'",
+		"start-round:local:dry": "bash -lc 'source .env.local && forge script script/StartRound.s.sol --rpc-url http://127.0.0.1:8545'",
+
+		"start-round:mainnet": "bash -lc 'source .env.base && forge script script/StartRound.s.sol --rpc-url base --broadcast'",
+		"start-round:testnet": "bash -lc 'source .env.base_sepolia && forge script script/StartRound.s.sol --rpc-url base_sepolia --broadcast'",
+		"start-round:mainnet:dry": "bash -lc 'source .env.base && forge script script/StartRound.s.sol --rpc-url base'",
+		"start-round:testnet:dry": "bash -lc 'source .env.base_sepolia && forge script script/StartRound.s.sol --rpc-url base_sepolia'",
+
+		"set-permissionless:local": "bash -lc 'source .env.local && forge script script/SetPermissionlessRoundStart.s.sol --rpc-url http://127.0.0.1:8545 --broadcast'",
+		"set-permissionless:local:dry": "bash -lc 'source .env.local && forge script script/SetPermissionlessRoundStart.s.sol --rpc-url http://127.0.0.1:8545'",
+
+		"set-permissionless:mainnet": "bash -lc 'source .env.base && forge script script/SetPermissionlessRoundStart.s.sol --rpc-url base --broadcast'",
+		"set-permissionless:testnet": "bash -lc 'source .env.base_sepolia && forge script script/SetPermissionlessRoundStart.s.sol --rpc-url base_sepolia --broadcast'",
+		"set-permissionless:mainnet:dry": "bash -lc 'source .env.base && forge script script/SetPermissionlessRoundStart.s.sol --rpc-url base'",
+		"set-permissionless:testnet:dry": "bash -lc 'source .env.base_sepolia && forge script script/SetPermissionlessRoundStart.s.sol --rpc-url base_sepolia'",
+
+		"set-last-round:local": "bash -lc 'source .env.local && forge script script/SetLastRound.s.sol --rpc-url http://127.0.0.1:8545 --broadcast'",
+		"set-last-round:local:dry": "bash -lc 'source .env.local && forge script script/SetLastRound.s.sol --rpc-url http://127.0.0.1:8545'",
+
+		"set-last-round:mainnet": "bash -lc 'source .env.base && forge script script/SetLastRound.s.sol --rpc-url base --broadcast'",
+		"set-last-round:testnet": "bash -lc 'source .env.base_sepolia && forge script script/SetLastRound.s.sol --rpc-url base_sepolia --broadcast'",
+		"set-last-round:mainnet:dry": "bash -lc 'source .env.base && forge script script/SetLastRound.s.sol --rpc-url base'",
+		"set-last-round:testnet:dry": "bash -lc 'source .env.base_sepolia && forge script script/SetLastRound.s.sol --rpc-url base_sepolia'",
+
+		"set-default-token:local": "bash -lc 'source .env.local && forge script script/SetDefaultToken.s.sol --rpc-url http://127.0.0.1:8545 --broadcast'",
+		"set-default-token:local:dry": "bash -lc 'source .env.local && forge script script/SetDefaultToken.s.sol --rpc-url http://127.0.0.1:8545'",
+
+		"set-default-token:mainnet": "bash -lc 'source .env.base && forge script script/SetDefaultToken.s.sol --rpc-url base --broadcast'",
+		"set-default-token:testnet": "bash -lc 'source .env.base_sepolia && forge script script/SetDefaultToken.s.sol --rpc-url base_sepolia --broadcast'",
+		"set-default-token:mainnet:dry": "bash -lc 'source .env.base && forge script script/SetDefaultToken.s.sol --rpc-url base'",
+		"set-default-token:testnet:dry": "bash -lc 'source .env.base_sepolia && forge script script/SetDefaultToken.s.sol --rpc-url base_sepolia'",
+
+		"update-base-price:local": "bash -lc 'source .env.local && forge script script/UpdateBasePrice.s.sol --rpc-url http://127.0.0.1:8545 --broadcast'",
+		"update-base-price:local:dry": "bash -lc 'source .env.local && forge script script/UpdateBasePrice.s.sol --rpc-url http://127.0.0.1:8545'",
+
+		"update-base-price:mainnet": "bash -lc 'source .env.base && forge script script/UpdateBasePrice.s.sol --rpc-url base --broadcast'",
+		"update-base-price:testnet": "bash -lc 'source .env.base_sepolia && forge script script/UpdateBasePrice.s.sol --rpc-url base_sepolia --broadcast'",
+		"update-base-price:mainnet:dry": "bash -lc 'source .env.base && forge script script/UpdateBasePrice.s.sol --rpc-url base'",
+		"update-base-price:testnet:dry": "bash -lc 'source .env.base_sepolia && forge script script/UpdateBasePrice.s.sol --rpc-url base_sepolia'"
+	}
 }
