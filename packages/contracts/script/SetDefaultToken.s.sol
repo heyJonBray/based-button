@@ -19,7 +19,10 @@ contract SetDefaultToken is Script {
     address oldToken = hub.defaultToken();
     require(newToken != oldToken, "New token is already the default");
 
-    vm.startBroadcast();
+    uint256 privateKey = vm.envUint("PRIVATE_KEY");
+    require(privateKey != 0, "PRIVATE_KEY must be set");
+
+    vm.startBroadcast(privateKey);
     hub.setDefaultToken(newToken);
     vm.stopBroadcast();
 

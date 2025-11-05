@@ -14,7 +14,10 @@ contract SetPermissionlessRoundStart is Script {
     require(hubAddress.code.length > 0, "HUB_ADDRESS is not a contract");
     ButtonHub hub = ButtonHub(hubAddress);
 
-    vm.startBroadcast();
+    uint256 privateKey = vm.envUint("PRIVATE_KEY");
+    require(privateKey != 0, "PRIVATE_KEY must be set");
+
+    vm.startBroadcast(privateKey);
     hub.setPermissionlessRoundStart(enabled);
     vm.stopBroadcast();
 
